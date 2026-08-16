@@ -5,6 +5,14 @@ Ideas land here, not in the current branch. Newest at top.
 The habit is the point: every project in this workbench that stayed shippable kept one of
 these, and the one that didn't turned into a six-month project that didn't work yet.
 
+## Done since this list was written (2026-08-16)
+
+Struck rather than deleted, because "we said we'd do it and did" is worth as much as the
+backlog: non-destructive page boxing, automatic text-boxing on capture, ingredient group
+headings in the edit form, portion scaling and unit display, the comma-first normalizer bug
+and the canonical backfill that makes fixing it mean anything, and sharing pages to an
+outside AI.
+
 ## After phase 4 — the honest gaps
 
 - **The live parse has never been run.** It needs Alisa's own API key, which this project
@@ -12,12 +20,6 @@ these, and the one that didn't turned into a six-month project that didn't work 
   and check what comes back against the printed page.
 - Measure parse quality on ten photos from three books, then try `claude-haiku-4-5` on the
   same ten and compare. Measure, then downgrade — never the other way round.
-- Ingredient group headings ("For the crust") survive the parse but the edit screen still
-  has no way to show them, so they collapse into one list on save. The cook view already
-  renders groups; the edit form is the gap.
-- A page photo's crop is still whole-image only. Boxing the recipe before sending would
-  improve the parse and roughly halve the image tokens — `PhotoCrop` is square-only and
-  destructive, so a page needs the non-destructive rect path instead.
 - The dinner tally reads "104 recipes · 104 ready" before she marks anything; `READY TO
   COOK` has the same problem at cold start.
 
@@ -53,16 +55,12 @@ because "we tried it and she didn't want it" is worth more than the code was.
   (fraction-aware ×2 / ×½, already listed below). Needs a design conversation first: what
   the card shows, what cook mode shows, whether "does one onion satisfy 2 onions" is ever
   the match's business (it isn't, per the phase-2 brief).
-- The normalizer's comma-first rule loses the ingredient in "skinless, boneless chicken"
-  (→ `skinless` → nothing). Fix is small; needs a canonical backfill for existing rows.
 - 100 real recipes make the registry noisy — `chicken stock`, `chicken broth`, `homemade
   chicken stock`, `low-sodium chicken broth` are four tiles. Alias merging in Settings
   (below) is the answer, not a taxonomy.
 - An "include the starter recipes" chip on the dinner screen once her own collection is
   large enough that the starters drown it (05-SOURCES-AND-RIGHTS.md). Today: Remove in
   Settings.
-- A canonical backfill command, so improving the normalizer re-derives `canonical` and
-  `ingredientIndex` for rows already on the device.
 
 ## Came up while building the dinner screen
 

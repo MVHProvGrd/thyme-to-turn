@@ -143,18 +143,10 @@ export function fold(text: string): string {
  * try to be clever about categories. "bell pepper" stays "bell pepper" — it is not
  * "pepper", and conflating them is exactly the bug that makes the dinner screen lie.
  */
-export function normalize(name: string): string {
-  const base = fold(name)
-    // Drop anything parenthesised — it's almost always a metric conversion or an aside.
-    .replace(/\([^)]*\)/g, ' ')
-    // Everything after the first comma is a note: "flour, sifted".
-    .split(',')[0]
-    // "salt to taste", "oil as needed", "parsley if desired" — the tail is an instruction,
-    // not part of the name. Without this "salt to taste" becomes the ingredient "salt taste".
-    .replace(/\b(to taste|as needed|as required|if desired|for serving|for garnish|to serve|to garnish)\b.*$/, ' ')
+/** One comma-separated segment, stripped of quantities, units and preparations. */
+function nameWords(segment: string): string[] {
+  return segment
     .replace(/[^a-z0-9 '-]/g, ' ')
-
-  const words = base
     .split(' ')
     .map((w) => w.trim())
     .filter(Boolean)
@@ -162,8 +154,27 @@ export function normalize(name: string): string {
     .filter((w) => !(w in UNITS))
     .filter((w) => !PREPARATIONS.has(w))
     .map(singular)
+}
 
-  return words.join(' ').trim()
+export function normalize(name: string): string {
+  const cleaned = fold(name)
+    // Drop anything parenthesised — it's almost always a metric conversion or an aside.
+    .replace(/\([^)]*\)/g, ' ')
+    // "salt to taste", "oil as needed", "parsley if desired" — the tail is an instruction,
+    // not part of the name. Without this "salt to taste" becomes the ingredient "salt taste".
+    .replace(/\b(to taste|as needed|as required|if desired|for serving|for garnish|to serve|to garnish)\b.*$/, ' ')
+
+  // What follows the first comma is USUALLY a note — "flour, sifted" — and taking the head
+  // is right there. But it is not always: "skinless, boneless chicken breast" puts the
+  // adjectives first and the ingredient LAST, and taking the head blindly threw the chicken
+  // away and left nothing at all, so that recipe could never match chicken. Take the first
+  // segment that still has a name in it once quantities, units and preparations are
+  // stripped; where the head survives — the common case — nothing changes.
+  for (const segment of cleaned.split(',')) {
+    const words = nameWords(segment)
+    if (words.length > 0) return words.join(' ')
+  }
+  return ''
 }
 
 /** "1½" → 1.5 · "1 1/2" → 1.5 · "2-3" → 2 (the low end; she can read the raw line). */
@@ -227,14 +238,32 @@ export function parseIngredientLine(raw: string): Ingredient {
     }
   }
 
-  const commaIndex = rest.indexOf(',')
+  // Which comma-separated piece is the INGREDIENT, and which pieces are the note?
+  // Usually the first: "flour, sifted". But "skinless, boneless chicken breasts" leads with
+  // the adjectives, and taking the head made the item "skinless" and filed the chicken
+  // itself away as a note -- so the line matched nothing. Take the first piece that still
+  // has a name in it once quantities, units and preparations are stripped; everything else
+  // is the note. `raw` keeps the printed line verbatim either way.
+  const segments = rest.split(',')
+  let nameAt = 0
+  for (let i = 0; i < segments.length; i += 1) {
+    if (normalize(segments[i])) {
+      nameAt = i
+      break
+    }
+  }
   // Parentheticals are almost always a metric conversion; `raw` still has them, so the
   // displayed line stays clean and nothing is lost.
-  const item = (commaIndex >= 0 ? rest.slice(0, commaIndex) : rest)
+  const item = segments[nameAt]
     .replace(/\([^)]*\)/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  const note = commaIndex >= 0 ? rest.slice(commaIndex + 1).trim() : undefined
+  const note =
+    segments
+      .filter((_, i) => i !== nameAt)
+      .join(', ')
+      .replace(/\s+/g, ' ')
+      .trim() || undefined
 
   const canonical = normalize(item || rest)
 

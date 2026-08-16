@@ -439,7 +439,7 @@ await page.screenshot({ path: `${OUT}/30-list-thumbnail.png` })
 
 // With no key the screen says so and still lets her keep photos. NEVER put a real key here.
 await page.goto(`${BASE}#/parse`)
-await page.waitForSelector('text=Add your Claude API key')
+await page.waitForSelector("text=send it to an AI you already have")
 await page.screenshot({ path: `${OUT}/31-parse-no-key.png` })
 
 // A page photographed. The parse itself needs her own key, so it is not exercised here.
@@ -606,6 +606,20 @@ await page.getByText('Braised fennel with cream', { exact: true }).click()
 await page.waitForSelector('text=Make')
 await page.waitForTimeout(300)
 await page.screenshot({ path: `${OUT}/40-recipe-metric-doubled.png` })
+
+// Repairing the match keys on recipes already saved, and the honest cost/account note
+// next to the key field. Selectors are role-based: the section heading and the button
+// share the words 'ingredient matching'.
+await page.goto(`${BASE}#/settings`)
+await page.getByRole('heading', { name: 'Ingredient matching' }).scrollIntoViewIfNeeded()
+await page.waitForTimeout(250)
+await page.screenshot({ path: `${OUT}/41-settings-matching.png` })
+await page.getByRole('button', { name: 'Re-check ingredient matching' }).click()
+await page.waitForTimeout(900)
+await page.screenshot({ path: `${OUT}/41b-settings-matching-done.png` })
+await page.getByRole('heading', { name: 'Claude API key' }).scrollIntoViewIfNeeded()
+await page.waitForTimeout(250)
+await page.screenshot({ path: `${OUT}/42-settings-key.png` })
 
 console.log('shots written')
 await browser.close()

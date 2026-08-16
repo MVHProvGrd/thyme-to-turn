@@ -6,6 +6,7 @@ import Disclosure, { CheckRow } from '../components/Disclosure'
 import { useToast } from '../components/Toast'
 import { exportBackup, importBackup } from '../db/backup'
 import {
+  backfillCanonicals,
   addStarterRecipes,
   countRecipes,
   countStarterRecipes,
@@ -51,6 +52,30 @@ export default function Settings() {
   const [apiKey, setApiKeyValue] = useState(() => getApiKey())
   const [stapleQuery, setStapleQuery] = useState('')
   const [newStaple, setNewStaple] = useState('')
+
+  /**
+   * Re-derive the match keys for recipes already saved. A better normalizer only helps
+   * recipes written after it, so without this her existing collection keeps whatever the
+   * old rule produced -- including lines that matched nothing at all.
+   */
+  async function doRecheckMatching() {
+    setBusy(true)
+    try {
+      const report = await backfillCanonicals()
+      if (report.recipesChanged === 0) {
+        toast('Nothing to fix -- every recipe already matches properly.')
+      } else {
+        const recovered = report.ingredientsRecovered
+        toast(
+          recovered > 0
+            ? `Fixed ${report.recipesChanged} recipes. ${recovered} ingredients can be matched now.`
+            : `Updated ${report.recipesChanged} recipes.`,
+        )
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function addStaple() {
     const name = newStaple
@@ -339,6 +364,21 @@ export default function Settings() {
               Remove starter recipes
             </Button>
           ) : null}
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
+            Ingredient matching
+          </h2>
+          <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+            The dinner screen matches on a tidied-up version of each ingredient line, worked out
+            when the recipe was saved. When that tidying improves, older recipes keep the old
+            result until you run this. It only touches the matching, never your recipes --
+            the printed lines, notes and everything else stay exactly as they are.
+          </p>
+          <Button variant="secondary" disabled={busy} onClick={() => void doRecheckMatching()}>
+            {busy ? 'Checking…' : 'Re-check ingredient matching'}
+          </Button>
         </section>
 
         <section className="flex flex-col gap-3">

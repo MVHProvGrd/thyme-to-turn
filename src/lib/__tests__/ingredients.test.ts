@@ -184,3 +184,55 @@ describe('coversByPrefix — what a pantry entry actually covers', () => {
     expect(coversByPrefix('pork', 'pork collar butt')).toBe(true)
   })
 })
+
+describe('normalize: adjectives before the ingredient', () => {
+  // The head-of-the-comma rule is right for a note and wrong for a lead-in adjective.
+  // "skinless, boneless chicken breast" used to normalise to NOTHING -- "skinless" is a
+  // preparation, so the head emptied out and the chicken was thrown away with it. A recipe
+  // like that could never match chicken, on the one screen the whole app is built around.
+  it('keeps the ingredient when the commas come first', () => {
+    expect(normalize('skinless, boneless chicken breast')).toBe('chicken breast')
+    expect(normalize('boneless, skinless chicken thighs')).toBe('chicken thigh')
+  })
+
+  it('still treats a trailing comma as a note', () => {
+    expect(normalize('flour, sifted')).toBe('flour')
+    expect(normalize('1 large onion, finely chopped')).toBe('onion')
+    expect(normalize('chicken, cooked and shredded')).toBe('chicken')
+  })
+
+  it('falls through several throwaway segments', () => {
+    expect(normalize('fresh, ripe, large tomatoes')).toBe('tomato')
+  })
+
+  it('is still empty when there is genuinely no ingredient', () => {
+    expect(normalize('finely chopped')).toBe('')
+    expect(normalize('to taste')).toBe('')
+  })
+})
+
+describe('parseIngredientLine: which comma-piece is the ingredient', () => {
+  it('files the adjectives as the note and keeps the ingredient', () => {
+    // It used to be exactly backwards: item "skinless", note "boneless chicken breasts".
+    const parsed = parseIngredientLine('2 skinless, boneless chicken breasts')
+    expect(parsed.item).toBe('boneless chicken breasts')
+    expect(parsed.canonical).toBe('chicken breast')
+    expect(parsed.quantity).toBe(2)
+    // The printed line is untouched whatever we decide about the pieces.
+    expect(parsed.raw).toBe('2 skinless, boneless chicken breasts')
+  })
+
+  it('still reads a plain trailing note the usual way', () => {
+    const parsed = parseIngredientLine('1 cup flour, sifted')
+    expect(parsed.item).toBe('flour')
+    expect(parsed.note).toBe('sifted')
+    expect(parsed.canonical).toBe('flour')
+    expect(parsed.unit).toBe('cup')
+  })
+
+  it('keeps every other piece as the note', () => {
+    const parsed = parseIngredientLine('500 g boneless, skinless chicken thighs, cut into chunks')
+    expect(parsed.canonical).toBe('chicken thigh')
+    expect(parsed.note).toBe('boneless, cut into chunks')
+  })
+})

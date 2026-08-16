@@ -117,6 +117,22 @@ Conventions worth keeping:
   oil`, `freshly-ground black pepper`, `all-purpose flour` — because with 100 real recipes
   those otherwise turn up as question tiles. Applied when an entry is first minted; hers
   to flip afterwards.
+- **The comma is not always a note.** Both `normalize` and `parseIngredientLine` used to
+  take the head of the first comma — right for "flour, sifted", catastrophic for
+  "skinless, boneless chicken breasts", where the head is all adjectives. `normalize`
+  returned the empty string and `parseIngredientLine` set `item: "skinless"` with the
+  chicken filed away as the *note*, so the line matched nothing and the recipe was invisible
+  to the pantry — on the one screen this app exists for. Both now take the **first
+  comma-segment that still has a name in it** once quantities, units and preparations are
+  stripped; where the head survives (the common case) nothing changed. `raw` is untouched
+  either way.
+- **`repo.backfillCanonicals()` is how a normalizer fix reaches recipes already saved.**
+  `canonical` is derived at write time, so improving the rule only helps recipes written
+  afterwards — a fix nobody can apply to their own data is not a fix. It rewrites ONLY
+  `canonical` and `ingredientIndex`, deliberately does not move `updatedAt` (repairing a
+  derived field is not her editing the recipe), and is idempotent. Settings → "Re-check
+  ingredient matching". Tested against non-negotiable 6 in `db/__tests__/backfill.test.ts`:
+  raw, notes, title, steps and `verified` all come back untouched.
 - **`normalize` strips instruction tails** (`to taste`, `as needed`, `if desired`, `for
   serving`…) with word boundaries, so "Salt to taste" is `salt`, not `salt taste`.
 

@@ -274,6 +274,86 @@ export async function setStaple(uuid: string, isStaple: boolean): Promise<void> 
   await db.ingredients.put({ ...entry, isStaple })
 }
 
+/**
+ * Re-derive `canonical` and `ingredientIndex` for every recipe already on the device.
+ *
+ * WHY THIS HAS TO EXIST. `canonical` is derived from `raw` at write time, so improving the
+ * normalizer only helps recipes saved AFTER the improvement. Everything already stored keeps
+ * whatever the old rule produced — and when the old rule produced nothing (the
+ * "skinless, boneless chicken breast" case, where the head of the comma was all adjectives)
+ * that recipe is invisible to the pantry match forever. A fix nobody can apply to their own
+ * data is not a fix.
+ *
+ * SAFE BY CONSTRUCTION (non-negotiable 6). It only ever rewrites derived fields:
+ * `canonical` on each ingredient and the recipe's `ingredientIndex`. `raw` is never touched,
+ * and neither are her quantities, units, notes, items, tags, photos, steps or `verified`.
+ * `updatedAt` deliberately does not move — repairing a derived field is not her editing the
+ * recipe, and bumping it would shuffle every "recently changed" list she has.
+ *
+ * Running it twice changes nothing the second time.
+ */
+export type BackfillReport = {
+  recipesChecked: number
+  recipesChanged: number
+  /** Ingredients that had no usable match key before and have one now. */
+  ingredientsRecovered: number
+}
+
+/** Only `canonical` moves. Her explicit `item` still wins, exactly as it does on save. */
+function recanonicalise(ingredient: Ingredient): Ingredient {
+  const item = ingredient.item ?? parseIngredientLine(ingredient.raw).item
+  const canonical = item ? normalize(item) : ''
+  if (!canonical) {
+    if (ingredient.canonical === undefined) return ingredient
+    const { canonical: _dropped, ...rest } = ingredient
+    return rest
+  }
+  return ingredient.canonical === canonical ? ingredient : { ...ingredient, canonical }
+}
+
+export async function backfillCanonicals(): Promise<BackfillReport> {
+  const recipes = await db.recipes.toArray()
+  const cache = new Map<string, string>()
+  const touched: string[] = []
+  let recipesChanged = 0
+  let ingredientsRecovered = 0
+
+  for (const recipe of recipes) {
+    // Ingredients are GROUPED ("For the crust"). Walk the items and leave the headings be.
+    const groups = recipe.ingredients.map((group) => ({
+      ...group,
+      items: group.items.map(recanonicalise),
+    }))
+
+    recipe.ingredients.forEach((group, g) => {
+      group.items.forEach((item, i) => {
+        if (!item.canonical && groups[g].items[i].canonical) ingredientsRecovered += 1
+      })
+    })
+
+    const ingredientIndex: string[] = []
+    for (const name of canonicalNames(groups)) {
+      ingredientIndex.push(await resolveIngredientUuid(name, cache))
+    }
+
+    const sameItems = groups.every((group, g) =>
+      group.items.every((item, i) => item === recipe.ingredients[g].items[i]),
+    )
+    const sameIndex =
+      ingredientIndex.length === recipe.ingredientIndex.length &&
+      ingredientIndex.every((uuid, i) => uuid === recipe.ingredientIndex[i])
+    if (sameItems && sameIndex) continue
+
+    // Spread the stored recipe so nothing outside these two derived fields can drift.
+    await db.recipes.put({ ...recipe, ingredients: groups, ingredientIndex })
+    touched.push(...recipe.ingredientIndex, ...ingredientIndex)
+    recipesChanged += 1
+  }
+
+  await refreshSeenCounts(touched)
+  return { recipesChecked: recipes.length, recipesChanged, ingredientsRecovered }
+}
+
 /* --------------------------------------------------------------------- books */
 
 export async function listBooks(): Promise<Book[]> {
