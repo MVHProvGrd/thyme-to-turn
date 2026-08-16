@@ -264,8 +264,21 @@ The point of the app. Two ways in, one engine:
   Never move them to localStorage or IndexedDB.
 - **No image pipeline for tiles.** Emoji where coverage is confident, a typographic tile
   otherwise. Generated ingredient art is not a v1 conversation.
-- **Rank, never filter.** Three groups — ready now / one thing away / two things away —
-  with the missing items named on each card. A strict filter returns nothing most nights.
+- **Rank on `dontHave`; FILTER on `have`.** The two directions are not symmetric and this
+  is the most-revised rule in the file, so read the reasoning before changing it:
+  - **`dontHave` never filters.** Ruling things out is elimination, and a strict filter on
+    it returns nothing most nights. Recipes 2+ away are counted in the tally, not listed.
+  - **`have` filters** (`shortlist()` in `pantry.ts`). Once she has confirmed anything, the
+    list is only recipes that use at least one confirmed ingredient. Alisa asked for this
+    twice (2026-08-16): marking beef, onion and carrot and still seeing all 104 recipes
+    under READY TO COOK made the marks feel decorative — "the whole point is to show me
+    recipes WITH what I select". Saying what she has is a statement of intent, and unlike
+    elimination it cannot empty the screen: every recipe it hides uses none of her picks.
+  - `shortlist()` is **self-limiting** — if nothing she marked appears in any recipe, no
+    match has a confirmed ingredient and it returns everything rather than nothing. Marking
+    something obscure narrows the list; it can never blank it.
+  - When the list is narrowed the tally says so — `"43 of 104 use what you have"` — rather
+    than quietly showing 43 where there were 104.
 - **Subtract staples before matching** — the `isStaple` flag on each registry entry.
   Without this every recipe reads as infeasible and the screen is always empty. The flags
   are visible and editable in Settings (the same `Tile`, `unknown`/`have` only, via

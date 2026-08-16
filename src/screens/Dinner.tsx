@@ -11,7 +11,7 @@ import { useFlip } from '../components/useFlip'
 import { listIngredients, listRecipes } from '../db/repo'
 import { emojiFor } from '../lib/emoji'
 import { fold } from '../lib/ingredients'
-import { matchPantry, nextQuestions } from '../lib/pantry'
+import { matchPantry, nextQuestions, shortlist } from '../lib/pantry'
 import type { IngredientState, Match } from '../lib/pantry'
 import type { IngredientEntry } from '../lib/types'
 import { prefersReducedMotion } from '../platform/motion'
@@ -108,9 +108,12 @@ export default function Dinner() {
     [recipes, registry, marks],
   )
 
-  const ready = matches.filter((m) => m.missing.length === 0)
-  const oneAway = matches.filter((m) => m.missing.length === 1)
-  const ruledOut = matches.length - ready.length - oneAway.length
+  // Once she has said she HAS something, the list is only what uses it. See shortlist().
+  const shown = useMemo(() => shortlist(matches), [matches])
+  const narrowed = shown.length < matches.length
+  const ready = shown.filter((m) => m.missing.length === 0)
+  const oneAway = shown.filter((m) => m.missing.length === 1)
+  const ruledOut = shown.length - ready.length - oneAway.length
 
   const byUuid = useMemo(() => new Map((registry ?? []).map((e) => [e.uuid, e])), [registry])
   const byCanonical = useMemo(() => new Map((registry ?? []).map((e) => [e.canonical, e])), [registry])
@@ -135,9 +138,9 @@ export default function Dinner() {
       return entry && !entry.isStaple && marks[uuid] === tab ? [entry] : []
     })
     // Live candidates: what she might still cook — the recipes actually listed below.
-    const live = matches.filter((m) => m.missing.length <= 1)
+    const live = shown.filter((m) => m.missing.length <= 1)
     return [...answered, ...nextQuestions(live, registry, marks, QUESTIONS)]
-  }, [registry, query, marks, matches, byUuid, tab])
+  }, [registry, query, marks, shown, byUuid, tab])
 
   const flipRef = useFlip<HTMLDivElement>(!prefersReducedMotion())
 
@@ -146,7 +149,10 @@ export default function Dinner() {
   }
 
   const count = recipes.length
-  const tally = `${count} ${count === 1 ? 'recipe' : 'recipes'} · ${ready.length} ready · ${ruledOut} ruled out`
+  // Say why the list got shorter, rather than quietly showing 12 where there were 104.
+  const tally = narrowed
+    ? `${shown.length} of ${count} use what you have · ${ready.length} ready · ${ruledOut} ruled out`
+    : `${count} ${count === 1 ? 'recipe' : 'recipes'} · ${ready.length} ready · ${ruledOut} ruled out`
 
   function openRecipe(uuid: string) {
     navigate(`/recipe/${uuid}`, { state: { from: '/dinner' } })
@@ -242,7 +248,9 @@ export default function Dinner() {
             {ready.length === 0 && oneAway.length === 0 ? (
               <div className="mt-[14px] flex flex-col items-start gap-3 rounded-sm border border-rule bg-card px-5 py-7">
                 <p className="font-serif text-[19px] leading-[1.35] text-ink [text-wrap:pretty]">
-                  Nothing matches. Un-tap something, or add a recipe.
+                  {narrowed
+                    ? 'Nothing you have is one thing away. Un-tap something, or add a recipe.'
+                    : 'Nothing matches. Un-tap something, or add a recipe.'}
                 </p>
                 <Button onClick={reset}>Reset</Button>
               </div>

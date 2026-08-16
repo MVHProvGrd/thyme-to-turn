@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchPantry, nextQuestions, stateFor } from '../pantry'
+import { matchPantry, nextQuestions, shortlist, stateFor } from '../pantry'
 import type { IngredientState } from '../pantry'
 import type { IngredientEntry, Recipe } from '../types'
 
@@ -263,6 +263,37 @@ describe('matchPantry: the two filters, live at once', () => {
       ['Braised chicken thighs', 1, 1], // chicken thigh confirmed by prefix
       ['Spaghetti with anchovies', 1, 3],
     ])
+  })
+})
+
+describe('shortlist: once she says she HAS something, show what uses it', () => {
+  it('keeps only recipes that use something she confirmed', () => {
+    const marks = states({ garlic: 'have' })
+    const shown = shortlist(matchPantry(RECIPES, marks, REGISTRY))
+    expect(shown.map((m) => m.recipe.title).sort()).toEqual([
+      'Chickpea stew',
+      'Lentil soup',
+      'Spaghetti with anchovies',
+    ])
+    expect(shown.every((m) => m.confirmed.includes('garlic'))).toBe(true)
+  })
+
+  it('shows everything when she has confirmed nothing — the cold start is untouched', () => {
+    const all = matchPantry(RECIPES, {}, REGISTRY)
+    expect(shortlist(all)).toBe(all)
+  })
+
+  it('ruling things OUT never filters — that direction would empty the screen', () => {
+    const marks = states({ garlic: 'dontHave', cream: 'dontHave' })
+    const all = matchPantry(RECIPES, marks, REGISTRY)
+    expect(shortlist(all)).toBe(all)
+    expect(shortlist(all)).toHaveLength(RECIPES.length)
+  })
+
+  it('never blanks the screen: marking something no recipe uses shows everything', () => {
+    const marks = states({ parmesan: 'have' }) // in the registry, in none of these recipes
+    const all = matchPantry(RECIPES, marks, REGISTRY)
+    expect(shortlist(all)).toBe(all)
   })
 })
 

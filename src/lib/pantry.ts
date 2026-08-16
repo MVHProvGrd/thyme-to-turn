@@ -210,6 +210,31 @@ export function matchPantry(
 }
 
 /**
+ * Once she has said she HAS something, show only the recipes that use it.
+ *
+ * This is a deliberate exception to "rank, never filter", added because she asked twice
+ * (Alisa, 2026-08-16): marking beef, onion and carrot and still being shown all 104
+ * recipes under READY TO COOK made the marks feel decorative. "The whole point is to show
+ * me recipes WITH what I select."
+ *
+ * The two directions are NOT symmetric, which is why only this one filters:
+ *
+ *   dontHave  ruling things out is elimination. Filtering on it returns nothing most
+ *             nights — that is the original "rank, never filter" argument, and it stands.
+ *   have      saying what she has is a statement of INTENT: show me what uses this. It
+ *             cannot empty the screen, because every recipe it hides is one that uses
+ *             none of what she picked.
+ *
+ * Self-limiting on purpose: if nothing she marked appears in any recipe, no match has a
+ * confirmed ingredient and everything is returned rather than nothing. Marking something
+ * obscure narrows the list; it never blanks it.
+ */
+export function shortlist(matches: Match[]): Match[] {
+  const anyConfirmed = matches.some((match) => match.confirmed.length > 0)
+  return anyConfirmed ? matches.filter((match) => match.confirmed.length > 0) : matches
+}
+
+/**
  * The Twenty Questions move. The grid is not a dump of every ingredient: it offers the
  * ingredient that appears in closest to half the live candidates, so each tap roughly
  * halves the field. Re-rank after every tap.
