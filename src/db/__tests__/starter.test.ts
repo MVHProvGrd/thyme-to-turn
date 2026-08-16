@@ -17,13 +17,22 @@ import { loadStarterRecipes } from '../../seed'
  * The starter set goes through the real repo, so the properties that matter are the
  * repo's: idempotent add, one registry row per ingredient name, her edits are never
  * overwritten or removed, and nothing of hers is touched by "remove".
+ *
+ * The tests that load all 100 need a raised timeout. `addStarterRecipes` runs every recipe
+ * through `saveRecipe`, which resolves each ingredient against the registry and recounts
+ * `seenCount` — roughly a thousand indexed round-trips, and fake-indexeddb is far slower
+ * than a real browser's. At the 5s default this sat right on the edge, and when it tipped
+ * over the failure was nasty rather than obvious: the timeout abandoned writes mid-flight,
+ * they landed after the NEXT test's `wipeEverything()`, and two later tests failed with
+ * counts too HIGH from recipes that were never theirs. A slow test that leaks is worse
+ * than a slow test, so this is a real timeout rather than a smaller sample.
  */
 describe('starter recipes through repo.ts', () => {
   beforeEach(async () => {
     await wipeEverything()
   })
 
-  it('adds once; adding again changes nothing', async () => {
+  it('adds once; adding again changes nothing', { timeout: 60_000 }, async () => {
     const seed = await loadStarterRecipes()
     const first = await addStarterRecipes(seed)
     expect(first).toEqual({ added: seed.length, skipped: 0 })
@@ -43,7 +52,7 @@ describe('starter recipes through repo.ts', () => {
     }
   })
 
-  it('reconciles ingredients into HER registry — one garlic, not two', async () => {
+  it('reconciles ingredients into HER registry — one garlic, not two', { timeout: 60_000 }, async () => {
     await saveRecipe({
       title: 'Her garlic bread',
       source: { kind: 'other' },
