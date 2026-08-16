@@ -44,6 +44,9 @@ const MERGE_MODES: { mode: 'fold' | 'inspect'; label: string }[] = [
   { mode: 'inspect', label: 'Look inside' },
 ]
 
+/** Rows of the ingredient list per "show more". Enough to scan, short enough to load. */
+const MERGE_PAGE = 25
+
 export default function Settings() {
   const toast = useToast()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -73,6 +76,8 @@ export default function Settings() {
   const [mergeMode, setMergeMode] = useState<'fold' | 'inspect'>('fold')
   /** The entry whose folded-in spellings are open, in "look inside" mode. */
   const [openEntry, setOpenEntry] = useState<string | null>(null)
+  /** How much of the ingredient list is on screen. Grows; never silently truncates. */
+  const [mergeShown, setMergeShown] = useState(MERGE_PAGE)
   const [newStaple, setNewStaple] = useState('')
 
   /**
@@ -160,13 +165,24 @@ export default function Settings() {
    */
   const staples = (ingredients ?? []).filter((entry) => entry.isStaple)
   /**
-   * Merge candidates: what she searched for, else the most-used entries. Sorted by
-   * `seenCount` already, so the noisiest duplicates surface without her hunting.
+   * Every ingredient she has, in ALPHABETICAL order — not by how often each turns up.
+   *
+   * Usage order was wrong for this list twice over. It buried the whole registry behind a
+   * silent cap of twelve, which looked like the complete list rather than the top of one
+   * (Alisa, 2026-08-16: "there does not appear to be a way to scroll through"). And it put
+   * `chicken broth` and `chicken stock` a hundred rows apart, when the entire job of this
+   * screen is noticing that they are the same thing. Alphabetical stands them next to each
+   * other.
+   *
+   * Paged rather than scrolled: a scrolling box inside a page fights the phone's own
+   * scroll. "Show more" grows the list downward, which does not.
    */
   const mergeQ = fold(mergeQuery.trim())
-  const mergeCandidates = mergeQ
-    ? (ingredients ?? []).filter((entry) => entry.canonical.includes(mergeQ)).slice(0, 20)
-    : (ingredients ?? []).slice(0, 12)
+  const mergeMatches = (ingredients ?? [])
+    .filter((entry) => !mergeQ || entry.canonical.includes(mergeQ) || entry.aliases.some((a) => fold(a).includes(mergeQ)))
+    .slice()
+    .sort((a, b) => a.canonical.localeCompare(b.canonical))
+  const mergeCandidates = mergeMatches.slice(0, mergeShown)
   const q = fold(stapleQuery)
   const suggestions = q
     ? (ingredients ?? []).filter((entry) => !entry.isStaple && entry.canonical.includes(q))
@@ -429,7 +445,11 @@ export default function Settings() {
           <input
             type="search"
             value={mergeQuery}
-            onChange={(event) => setMergeQuery(event.target.value)}
+            onChange={(event) => {
+              setMergeQuery(event.target.value)
+              setMergeShown(MERGE_PAGE)
+              setOpenEntry(null)
+            }}
             placeholder="search your ingredients…"
             aria-label="Search ingredients to merge"
             className="min-h-[44px] w-full rounded-sm border border-rule bg-paper px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
@@ -452,21 +472,28 @@ export default function Settings() {
                       }
                     }}
                     aria-expanded={mergeMode === 'inspect' ? open : undefined}
-                    aria-label={`${entry.canonical}, used in ${entry.seenCount}${
-                      entry.aliases.length ? `, ${entry.aliases.length} folded in` : ''
-                    }`}
+                    aria-label={
+                      entry.aliases.length
+                        ? `${entry.canonical}, ${entry.aliases.length} folded in`
+                        : `${entry.canonical}, nothing folded in`
+                    }
                     className={`flex min-h-[44px] w-full items-center justify-between gap-3 px-1 text-left font-mono text-[13px] ${
                       entry.uuid === mergeFrom ? 'text-copper' : 'text-ink'
                     }`}
                   >
                     <span>{entry.canonical}</span>
-                    <span className="flex shrink-0 items-center gap-2 text-[11px] text-ink-soft">
-                      {/* Which entries have something inside, without having to open them. */}
-                      {entry.aliases.length ? (
-                        <span className="text-thyme">+{entry.aliases.length}</span>
-                      ) : null}
-                      {entry.seenCount}
-                    </span>
+                    {/*
+                      The count is how many spellings are folded IN, not how often the
+                      ingredient turns up — this list is for tidying, and that is the only
+                      number with anything to do with tidying. Nothing folded in, no number:
+                      a column of "0"s is noise, and the rows with something inside are
+                      exactly the ones worth spotting.
+                    */}
+                    {entry.aliases.length ? (
+                      <span className="shrink-0 font-mono text-[11px] text-thyme">
+                        +{entry.aliases.length}
+                      </span>
+                    ) : null}
                   </button>
 
                   {open ? (
@@ -504,9 +531,34 @@ export default function Settings() {
               )
             })}
             {mergeCandidates.length === 0 ? (
-              <p className="font-mono text-[11px] text-ink-soft">Nothing to show.</p>
+              <p className="font-mono text-[11px] text-ink-soft">
+                {mergeQ ? 'No ingredient by that name.' : 'Nothing here yet.'}
+              </p>
             ) : null}
           </div>
+
+          {/*
+            Say what is on screen and what is not. A list that stops at twenty-five without
+            saying so reads as the whole registry, which is how she came to think there was
+            no way to scroll it.
+          */}
+          {mergeMatches.length > mergeCandidates.length ? (
+            <>
+              <p className="font-mono text-[11px] text-ink-soft">
+                Showing {mergeCandidates.length} of {mergeMatches.length}, A–Z.
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => setMergeShown((shown) => shown + MERGE_PAGE * 2)}
+              >
+                Show more
+              </Button>
+            </>
+          ) : mergeMatches.length > MERGE_PAGE ? (
+            <p className="font-mono text-[11px] text-ink-soft">
+              All {mergeMatches.length}, A–Z.
+            </p>
+          ) : null}
 
           {mergeFrom ? (
             <Button variant="secondary" onClick={() => setMergeFrom(null)}>

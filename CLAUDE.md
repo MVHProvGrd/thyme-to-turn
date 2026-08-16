@@ -439,7 +439,11 @@ The point of the app. Two ways in, one engine:
   their own entry, leaving the rest put. It only works because a merge never rewrites the
   printed lines or each ingredient's own `canonical` — keep it that way. Two actions on one
   list, so **she arms the mode first**; guessing from a single tap is how two things get
-  folded together by accident.
+  folded together by accident. The list is **alphabetical and paged, never capped**: A–Z is
+  what puts `chicken broth` next to `chicken stock`, and "Showing 25 of 587" plus a Show
+  more beats a silent `.slice(0, 12)` that reads as the whole registry. The number on a row
+  is **how many spellings are folded in**, shown only when there are any — this list is for
+  tidying, and a column of `0`s hides the rows worth spotting.
 - **A line that says "or" is ONE requirement with SEVERAL answers.** "minced or ground lamb
   or beef" stores `canonical: "lamb"` plus `alternatives: ["beef"]`, and the recipe needs
   either. It is only `missing` once she has ruled out **every** option — saying "no beef"
