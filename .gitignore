@@ -1,0 +1,21 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Secrets — nothing in this repo may ever contain an API key (CLAUDE.md, rule 4)
+.env
+.env.*
+*.key
+*.pem
+*.jks
+
+.claude/settings.local.json
+
+.DS_Store
+*.log
+npm-debug.log*
+coverage
+.vscode/*
+!.vscode/extensions.json
+.idea
