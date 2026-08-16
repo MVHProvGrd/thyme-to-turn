@@ -43,4 +43,18 @@ Live at https://mvhprovgrd.github.io/thyme-to-turn/
 
 ## Status
 
-**Phase 0** — it deploys. Next: storage and typing a recipe in.
+**Phase 1 — storage, and typing a recipe in.**
+
+You can add a recipe by hand, cook from it, and get it back out again:
+
+- **Recipes** — add, edit, and search by title, book, tag or ingredient.
+- **Cook mode** — steps step up to arm's-length size; tap one to keep your place.
+- **Settings → Export as JSON** — the whole collection in one file you can email yourself.
+  Import upserts by ID, so importing the same file twice changes nothing.
+
+It lives in IndexedDB on the device, and the app asks the browser to keep it
+(`storage.persist()`). There is no server and no copy anywhere else — **export before any
+update that changes the schema.**
+
+Next: **phase 2, the dinner screen** — mark what you're out of, see what you can still
+cook. That's the one the app exists for. Its design is in `docs/design/`.

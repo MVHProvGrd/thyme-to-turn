@@ -1,20 +1,33 @@
-import { HashRouter, Routes, Route } from 'react-router-dom'
-import Home from './screens/Home'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ToastProvider } from './components/Toast'
+import RecipeList from './screens/RecipeList'
+import RecipeDetail from './screens/RecipeDetail'
+import RecipeEdit from './screens/RecipeEdit'
+import Settings from './screens/Settings'
 
 /**
- * The route table. New screens are registered HERE, in one place, plus a nav entry —
- * two known places beats a screen that exists but can't be reached.
+ * The route table. New screens are registered HERE, in one place, plus a nav entry in
+ * components/TabBar.tsx — two known places beats a screen that exists but can't be reached.
  *
  * HashRouter, not BrowserRouter: GitHub Pages serves static files with no rewrite rules,
  * so a hard refresh on /recipe/abc123 would 404. Ugly URL, zero deploy config.
+ *
+ * Phase 2 adds /dinner and makes it the landing route — it's the product.
  */
 export default function App() {
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="*" element={<Home />} />
-      </Routes>
-    </HashRouter>
+    <ToastProvider>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/recipes" replace />} />
+          <Route path="/recipes" element={<RecipeList />} />
+          <Route path="/recipe/:uuid" element={<RecipeDetail />} />
+          <Route path="/edit" element={<RecipeEdit />} />
+          <Route path="/edit/:uuid" element={<RecipeEdit />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/recipes" replace />} />
+        </Routes>
+      </HashRouter>
+    </ToastProvider>
   )
 }

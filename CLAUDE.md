@@ -57,17 +57,49 @@ src/components/ shared presentational pieces; no db/api/platform imports
 - Screens never touch Dexie directly — go through `db/repo.ts`.
 - Screens never touch `navigator.*` directly — go through `platform/*`.
 - `lib/` imports nothing but `lib/`. This is what keeps it testable.
-- Enforced by ESLint `no-restricted-imports`. If you need to break a rule, change the rule
-  in this file and in the lint config, in the same commit.
+- **Enforced by a test, not lint config**: `src/lib/__tests__/architecture.test.ts` reads
+  every source file and fails on a forbidden import. It runs with `npm test`, survives a
+  change of linter, and can't quietly drift from this file. To break a rule, change it here
+  *and* in that test, in the same commit.
+
+## What exists right now
+
+Phase 1 is done — storage, and typing a recipe in.
+
+```
+lib/        types.ts · ids.ts · ingredients.ts · search.ts · backup-format.ts
+platform/   clock.ts · prefs.ts · files.ts
+db/         schema.ts (v1) · db.ts · repo.ts · backup.ts
+screens/    RecipeList · RecipeDetail (cook mode) · RecipeEdit · Settings
+components/ Screen · TabBar · Button · Field · Toast · SourceLine · EmptyState
+```
+
+Phase 2 is the dinner screen: `lib/pantry.ts`, the tri-state `Tile`, and a `/dinner` route
+that becomes the landing screen and the third tab. The design for it is in `docs/design/`
+— `HANDOFF.md` is the build spec, `designspec.md` is the intent, and `README.md` lists
+where this build knowingly differs and why.
+
+Conventions worth keeping:
+
+- **`raw` is never rewritten.** Parsed `quantity`/`unit`/`item`/`canonical` are conveniences
+  layered on the printed string; every view falls back to `raw`.
+- **`repo.ts` maintains every derived field** — `canonical`, `ingredientIndex`, `seenCount`.
+  Nothing else writes them, and `seenCount` is recounted rather than incremented so it
+  can't drift.
+- **Units are stored singular and displayed plural** (`formatUnit`). Storage matches;
+  display reads like a person wrote it.
+- **Import is upsert-by-uuid.** The test that matters is that importing the *same* file
+  twice changes nothing: `src/db/__tests__/roundtrip.test.ts`.
 
 ## Commands
 
 ```bash
-npm run dev                    # local dev server
-npx tsc --noEmit               # typecheck  — run before every commit
-npx vitest run                 # tests      — run before every commit
-npm run build                  # production build; also catches type errors
-npm run preview -- --port 4173 --host 127.0.0.1   # bind IPv4 explicitly
+npm run dev        # local dev server
+npm run check      # typecheck + tests + build — THE one to run before every commit
+npm run typecheck  # tsc -b  (NOT `tsc --noEmit` — see gotchas)
+npm test           # vitest run
+npm run preview    # already pinned to --port 4173 --host 127.0.0.1
+node shot.mjs      # drives the real app in Chromium, writes shots/*.png (needs preview up)
 ```
 
 `vite preview` must bind IPv4 or it fails with `EAFNOSUPPORT :::4173` in this sandbox.
@@ -80,7 +112,14 @@ Headless Chromium is preinstalled at `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`
 Do **not** run `playwright install`. Drive the real app, screenshot it, and read the
 screenshot back with the Read tool — don't declare a UI change done from the diff alone.
 
-Put temp scripts and screenshots in the scratchpad dir, never in the repo.
+`shot.mjs` in the repo root does this: it types three recipes in through the real form at
+390×844, then shoots the list, edit, detail, cook mode, settings and a post-reload check.
+Extend it when a screen lands. Output goes to `shots/`, which is gitignored.
+
+Chromium in this sandbox **cannot reach the live github.io URL** (`ERR_CONNECTION_RESET`)
+even though `curl` can. Verify the deployed site with `curl` for status codes and the
+`<title>`, and screenshot the identical build from `npm run preview` — don't claim to have
+seen the live page.
 
 ## Data model quick reference
 
@@ -97,8 +136,14 @@ Put temp scripts and screenshots in the scratchpad dir, never in the repo.
   `kind: 'page'` is EVIDENCE — crop non-destructively (keep the original blob + a `crop`
   rect), because it's the only record of what the page said when a parse was wrong.
   `kind: 'dish'` is hers — destructive crop is fine, and the first one is the thumbnail
-- Export = zip of `manifest.json` + json tables + `photos/`. Import **upserts by uuid** —
-  never appends. The round-trip test (`export → wipe → import → import again`) must pass.
+- Export = `manifest.json` + json tables + `photos/`. **Phase 1 ships it as a single JSON
+  file** with that manifest as an envelope — there are no photos yet and one file she can
+  email herself beats a zip she has to unpack. Phase 4 wraps the same object in a zip.
+- Import **upserts by uuid** — never appends. The round-trip test
+  (`export → wipe → import → import again`) must pass.
+- **`isStaple` is deliberately not a Dexie index.** IndexedDB can't key on a boolean, so
+  Dexie silently leaves those rows out and the filter looks like it works while returning
+  nothing. The registry is small; filter it in memory.
 
 ## Claude API call (`src/api/claude.ts`)
 
