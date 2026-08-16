@@ -431,6 +431,15 @@ The point of the app. Two ways in, one engine:
   the prefix convention only: pantry `chicken` matches `chicken thigh` via
   `startsWith("chicken ")` — mind the space, `chick` must not match. No categories, no
   parent/child fields, no tree.
+- **A fold is undoable, and that is what makes it safe to offer.** Settings → Duplicate
+  ingredients has two modes — **Fold together** (two taps: the spelling to fold away, then
+  the one to keep) and **Look inside** (one tap opens an entry and lists what was folded in,
+  each with a `×`). `unmergeAlias()` in `repo.ts` is the undo: it drops the alias, then
+  re-derives the index for the recipes that *actually spell it that way* so they return to
+  their own entry, leaving the rest put. It only works because a merge never rewrites the
+  printed lines or each ingredient's own `canonical` — keep it that way. Two actions on one
+  list, so **she arms the mode first**; guessing from a single tap is how two things get
+  folded together by accident.
 - **A line that says "or" is ONE requirement with SEVERAL answers.** "minced or ground lamb
   or beef" stores `canonical: "lamb"` plus `alternatives: ["beef"]`, and the recipe needs
   either. It is only `missing` once she has ruled out **every** option — saying "no beef"

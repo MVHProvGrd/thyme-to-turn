@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast'
 import { exportBackup, importBackup } from '../db/backup'
 import {
   mergeIngredients,
+  unmergeAlias,
   backfillCanonicals,
   addStarterRecipes,
   countRecipes,
@@ -34,6 +35,15 @@ import { BackupError } from '../lib/backup-format'
  * Deliberately absent: the API key field. It arrives in phase 4 alongside the photo-parse
  * that uses it — a stored secret with nothing to spend it on is a liability, not a feature.
  */
+/**
+ * What a tap on an ingredient does. Two different actions on the same list, so she picks
+ * which one is armed rather than the app guessing from a single tap.
+ */
+const MERGE_MODES: { mode: 'fold' | 'inspect'; label: string }[] = [
+  { mode: 'fold', label: 'Fold together' },
+  { mode: 'inspect', label: 'Look inside' },
+]
+
 export default function Settings() {
   const toast = useToast()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -55,6 +65,14 @@ export default function Settings() {
   const [mergeQuery, setMergeQuery] = useState('')
   /** The entry she picked first: the one that will be folded away. */
   const [mergeFrom, setMergeFrom] = useState<string | null>(null)
+  /**
+   * What a tap on an ingredient DOES. Folding needs two taps in a row and rewrites
+   * pointers; looking inside needs one and changes nothing. Guessing which she meant from a
+   * single tap is how you fold two things together by accident, so she says which first.
+   */
+  const [mergeMode, setMergeMode] = useState<'fold' | 'inspect'>('fold')
+  /** The entry whose folded-in spellings are open, in "look inside" mode. */
+  const [openEntry, setOpenEntry] = useState<string | null>(null)
   const [newStaple, setNewStaple] = useState('')
 
   /**
@@ -103,6 +121,30 @@ export default function Settings() {
         ? `Merged. 1 recipe now uses "${into.canonical}".`
         : `Merged. ${result.recipesRepointed} recipes now use "${into.canonical}".`,
     )
+  }
+
+  /**
+   * Take one spelling back out. The undo for a fold, and the reason a fold is safe to try:
+   * recipes that actually spell it the old way go back to their own entry, and ones that
+   * never did stay put. No confirm — nothing is lost, and re-folding is two taps away.
+   */
+  async function doUnmerge(uuid: string, alias: string) {
+    const result = await unmergeAlias(uuid, alias)
+    if (!result) return
+    toast(
+      result.recipesRepointed === 0
+        ? `"${alias}" is its own ingredient again. No recipe was spelling it that way.`
+        : result.recipesRepointed === 1
+          ? `"${alias}" is its own ingredient again. 1 recipe went back to it.`
+          : `"${alias}" is its own ingredient again. ${result.recipesRepointed} recipes went back to it.`,
+    )
+  }
+
+  /** Switching what a tap means always clears whatever the other mode had half-started. */
+  function selectMergeMode(mode: 'fold' | 'inspect') {
+    setMergeMode(mode)
+    setMergeFrom(null)
+    setOpenEntry(null)
   }
 
   async function addStaple() {
@@ -346,14 +388,42 @@ export default function Settings() {
             chicken stock. The dinner screen then asks about the same ingredient four times.
             Tap the spelling you want to fold away, then the one to keep. Your recipes are not
             changed — they just point at the one entry afterwards, and the old spelling keeps
-            working.
+            working. Changed your mind? Switch to "look inside" and take it back out.
           </p>
-          <p className="font-mono text-[11px] leading-[1.6] text-copper">
-            {mergeFrom
-              ? `Now tap the one to KEEP. "${
-                  (ingredients ?? []).find((row) => row.uuid === mergeFrom)?.canonical ?? ''
-                }" will fold into it.`
-              : 'Nothing picked yet.'}
+          <div role="tablist" aria-label="What a tap does" className="flex">
+            {MERGE_MODES.map((entry) => {
+              const active = mergeMode === entry.mode
+              return (
+                <button
+                  key={entry.mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => selectMergeMode(entry.mode)}
+                  className={`min-h-[44px] flex-1 border-b-2 font-mono text-[11px] uppercase tracking-[0.08em] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-thyme ${
+                    active
+                      ? 'border-leaf font-semibold text-thyme'
+                      : 'border-rule font-normal text-ink-soft'
+                  }`}
+                >
+                  {entry.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <p
+            className={`font-mono text-[11px] leading-[1.6] ${
+              mergeMode === 'fold' ? 'text-copper' : 'text-ink-soft'
+            }`}
+          >
+            {mergeMode === 'inspect'
+              ? 'Tap an ingredient to see the spellings folded into it. Nothing changes until you take one out.'
+              : mergeFrom
+                ? `Now tap the one to KEEP. "${
+                    (ingredients ?? []).find((row) => row.uuid === mergeFrom)?.canonical ?? ''
+                  }" will fold into it.`
+                : 'Nothing picked yet.'}
           </p>
 
           <input
@@ -365,21 +435,74 @@ export default function Settings() {
             className="min-h-[44px] w-full rounded-sm border border-rule bg-paper px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
           />
 
-          <div className="flex flex-col" role="group" aria-label="Ingredients you can merge">
-            {mergeCandidates.map((entry) => (
-              <button
-                key={entry.uuid}
-                type="button"
-                onClick={() => (mergeFrom ? void doMerge(entry.uuid) : setMergeFrom(entry.uuid))}
-                aria-label={`${entry.canonical}, used in ${entry.seenCount}`}
-                className={`flex min-h-[44px] items-center justify-between gap-3 border-b border-rule px-1 text-left font-mono text-[13px] ${
-                  entry.uuid === mergeFrom ? 'text-copper' : 'text-ink'
-                }`}
-              >
-                <span>{entry.canonical}</span>
-                <span className="shrink-0 text-[11px] text-ink-soft">{entry.seenCount}</span>
-              </button>
-            ))}
+          <div className="flex flex-col" role="group" aria-label="Your ingredients">
+            {mergeCandidates.map((entry) => {
+              const open = mergeMode === 'inspect' && openEntry === entry.uuid
+              return (
+                <div key={entry.uuid} className="border-b border-rule">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (mergeMode === 'inspect') {
+                        setOpenEntry(open ? null : entry.uuid)
+                      } else if (mergeFrom) {
+                        void doMerge(entry.uuid)
+                      } else {
+                        setMergeFrom(entry.uuid)
+                      }
+                    }}
+                    aria-expanded={mergeMode === 'inspect' ? open : undefined}
+                    aria-label={`${entry.canonical}, used in ${entry.seenCount}${
+                      entry.aliases.length ? `, ${entry.aliases.length} folded in` : ''
+                    }`}
+                    className={`flex min-h-[44px] w-full items-center justify-between gap-3 px-1 text-left font-mono text-[13px] ${
+                      entry.uuid === mergeFrom ? 'text-copper' : 'text-ink'
+                    }`}
+                  >
+                    <span>{entry.canonical}</span>
+                    <span className="flex shrink-0 items-center gap-2 text-[11px] text-ink-soft">
+                      {/* Which entries have something inside, without having to open them. */}
+                      {entry.aliases.length ? (
+                        <span className="text-thyme">+{entry.aliases.length}</span>
+                      ) : null}
+                      {entry.seenCount}
+                    </span>
+                  </button>
+
+                  {open ? (
+                    <div className="flex flex-col gap-2 pb-3 pl-1 pr-1 pt-1">
+                      {entry.aliases.length === 0 ? (
+                        <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+                          Nothing folded in. This is the only spelling of it.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="font-mono text-[11px] text-ink-soft">
+                            Also counts as — tap × to make one its own ingredient again:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {entry.aliases.map((alias) => (
+                              <button
+                                key={alias}
+                                type="button"
+                                onClick={() => void doUnmerge(entry.uuid, alias)}
+                                aria-label={`take "${alias}" back out of ${entry.canonical}`}
+                                className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-rule bg-card pl-[11px] pr-[10px] font-mono text-xs text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+                              >
+                                {alias}
+                                <span aria-hidden="true" className="text-[15px] leading-none text-copper">
+                                  ×
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
             {mergeCandidates.length === 0 ? (
               <p className="font-mono text-[11px] text-ink-soft">Nothing to show.</p>
             ) : null}

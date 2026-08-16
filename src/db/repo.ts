@@ -378,6 +378,52 @@ export async function mergeIngredients(
 }
 
 /**
+ * Take one spelling back out of an entry it was folded into: the undo for `mergeIngredients`.
+ *
+ * A fold is easy to get slightly wrong — `chicken stock` and `chicken broth` really are the
+ * same thing, `cream` and `sour cream` really are not — and until now there was no way to
+ * look inside an entry, let alone change your mind. This is what makes the fold safe to do:
+ * it can be undone.
+ *
+ * IT WORKS BECAUSE THE PRINTED LINES WERE NEVER TOUCHED. A merge repoints the recipe's
+ * registry uuids and leaves each ingredient's own `canonical` exactly as written, so the
+ * recipes that actually spelled it the old way can still be found afterwards and sent back.
+ * Recipes that only ever said the surviving name stay where they are.
+ *
+ * Nothing is deleted and nothing of hers moves: the same derived fields the repair pass
+ * rewrites, and no more.
+ */
+export async function unmergeAlias(
+  uuid: string,
+  alias: string,
+): Promise<{ recipesRepointed: number; canonical: string } | undefined> {
+  const entry = await db.ingredients.get(uuid)
+  if (!entry || !entry.aliases.includes(alias)) return undefined
+
+  // Off the survivor FIRST, or re-resolving the name below would just find it here again.
+  await db.ingredients.put({ ...entry, aliases: entry.aliases.filter((name) => name !== alias) })
+
+  // Only recipes that actually spell it the old way have anywhere to go. Re-deriving their
+  // index from their own lines is what sends them: the line still says `spring onion`, so
+  // it now resolves to a `spring onion` entry again, while a line saying `scallion` doesn't
+  // move. One rule, and no bookkeeping about which recipes came from where.
+  const affected = (await db.recipes.where('ingredientIndex').equals(uuid).toArray()).filter(
+    (recipe) => canonicalNames(recipe.ingredients).includes(alias),
+  )
+
+  const cache = new Map<string, string>()
+  const touched: string[] = [uuid]
+  for (const recipe of affected) {
+    const { ingredientIndex, ingredientChoices } = await indexIngredients(recipe.ingredients, cache)
+    touched.push(...recipe.ingredientIndex, ...ingredientIndex)
+    await db.recipes.put({ ...recipe, ingredientIndex, ingredientChoices })
+  }
+
+  await refreshSeenCounts(touched)
+  return { recipesRepointed: affected.length, canonical: entry.canonical }
+}
+
+/**
  * Re-derive `canonical` and `ingredientIndex` for every recipe already on the device.
  *
  * WHY THIS HAS TO EXIST. `canonical` is derived from `raw` at write time, so improving the
