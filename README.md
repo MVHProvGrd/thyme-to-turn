@@ -30,6 +30,17 @@ by a test (`src/lib/__tests__/architecture.test.ts`), not by convention.
 `CLAUDE.md` is the working guide and the single source of truth for conventions. Planning
 docs live in `MVHProvGrd/imageweaver-workbench` under `docs/cookbook-app/`.
 
+## Deploying
+
+Pushes to `main` build and deploy to GitHub Pages automatically.
+
+**One-time setup, already done or needs doing once:** Settings → Pages → Build and
+deployment → Source: **GitHub Actions**. The workflow can't turn this on for itself — the
+`GITHUB_TOKEN` lacks the scope to create a Pages site, which fails as
+`Resource not accessible by integration`.
+
+Live at https://mvhprovgrd.github.io/thyme-to-turn/
+
 ## Status
 
 **Phase 0** — it deploys. Next: storage and typing a recipe in.

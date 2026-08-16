@@ -182,6 +182,9 @@ The point of the app. Two ways in, one engine:
   pressure, and her collection is hand-made with no re-download.
 - `HashRouter`, not `BrowserRouter`. A hard refresh on a deep path 404s on Pages otherwise.
 - Downscale photos to ≤2000px **before** storing and before sending to the API.
+- **Pages must be enabled by hand once** (Settings → Pages → Source: GitHub Actions). Do
+  not add `enablement: true` to `configure-pages` — the workflow token can't create a Pages
+  site and it fails the whole build with `Resource not accessible by integration`.
 - Typecheck is `npm run typecheck` (`tsc -b`), not `tsc --noEmit` — the root tsconfig is
   `files: []` with three project references (app / node / test), so a bare `--noEmit`
   silently checks nothing. Test files are their own project because they need node types
