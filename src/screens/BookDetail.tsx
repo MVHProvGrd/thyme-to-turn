@@ -23,11 +23,11 @@ export default function BookDetail() {
   )
   const cover = useObjectUrl(blob)
 
-  if (book === undefined) return <Screen tabs={false}>{null}</Screen>
+  if (book === undefined) return <Screen>{null}</Screen>
 
   if (!book) {
     return (
-      <Screen tabs={false}>
+      <Screen>
         <div className="p-5">
           <p className="font-serif text-[19px] text-ink">That book isn't here any more.</p>
           <Button className="mt-4" onClick={() => navigate('/books')}>
@@ -42,7 +42,6 @@ export default function BookDetail() {
 
   return (
     <Screen
-      tabs={false}
       header={
         <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-[18px]">
           <button

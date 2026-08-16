@@ -139,6 +139,24 @@ export default function RecipeParse() {
     )
   }
 
+  /**
+   * The tab bar reaches every screen now, so leaving is one tap. Photographed pages live
+   * only in this component until she saves or keeps them, and a pasted reply is work she
+   * did in another app — neither should vanish to a stray thumb.
+   */
+  function confirmLeave(): boolean {
+    if (working) return confirm('Leave now? The page is still being read.')
+    if (pasted.trim()) return confirm("Leave without using the reply you pasted?")
+    if (shots.length > 0) {
+      return confirm(
+        shots.length === 1
+          ? 'Leave without keeping the page you photographed?'
+          : `Leave without keeping the ${shots.length} pages you photographed?`,
+      )
+    }
+    return true
+  }
+
   async function addFiles(files: File[]) {
     setError(null)
     setWorking('Getting the photos ready…')
@@ -207,7 +225,6 @@ export default function RecipeParse() {
 
   return (
     <Screen
-      tabs={false}
       header={
         <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-[18px]">
           <button
@@ -223,6 +240,7 @@ export default function RecipeParse() {
           <span className="min-w-[44px]" />
         </div>
       }
+      onLeave={confirmLeave}
     >
       <div className="flex flex-col gap-[18px] px-5 pb-10 pt-5">
         {!hasApiKey() ? (

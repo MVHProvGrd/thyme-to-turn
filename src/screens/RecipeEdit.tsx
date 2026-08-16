@@ -83,6 +83,26 @@ export default function RecipeEdit() {
   const [tags, setTags] = useState<string[]>([])
   const [bookUuid, setBookUuid] = useState('')
   const [saving, setSaving] = useState(false)
+  /**
+   * Has she typed anything? Set from real DOM input events on the form wrapper rather than
+   * threaded through every setter — loading a recipe calls those setters too, and a form
+   * that marks itself dirty just by opening would nag on every single exit.
+   */
+  const [dirty, setDirty] = useState(false)
+
+  /**
+   * The tab bar is on every screen now, so "Dinner" is one thumb away from a form full of
+   * work. A parse is the dangerous case: it lives in navigation state and is gone the
+   * moment this screen unmounts, so an unsaved parse always asks, typed or not.
+   */
+  function confirmLeave(): boolean {
+    if (saving) return true
+    if (fromParse) {
+      return confirm("Leave without saving? What was read from the page hasn't been saved yet.")
+    }
+    if (!dirty) return true
+    return confirm('Leave without saving? Your changes will be lost.')
+  }
 
   const books = useLiveQuery(listBooks, [], undefined)
 
@@ -198,11 +218,10 @@ export default function RecipeEdit() {
     navigate('/recipes', { replace: true })
   }
 
-  if (!loaded) return <Screen tabs={false}>{null}</Screen>
+  if (!loaded) return <Screen>{null}</Screen>
 
   return (
     <Screen
-      tabs={false}
       header={
         <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-[18px]">
           <button
@@ -220,8 +239,13 @@ export default function RecipeEdit() {
           </Button>
         </div>
       }
+      onLeave={confirmLeave}
     >
-      <div className="flex flex-col gap-[18px] px-5 pb-10 pt-5">
+      <div
+        onInput={() => setDirty(true)}
+        onChange={() => setDirty(true)}
+        className="flex flex-col gap-[18px] px-5 pb-10 pt-5"
+      >
         {fromParse ? (
           <div className="rounded-sm border border-rule border-l-2 border-l-leaf bg-card px-[14px] py-[13px]">
             <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">

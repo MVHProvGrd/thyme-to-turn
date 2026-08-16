@@ -252,6 +252,20 @@ seen the live page.
 - **The prompt captures functional content only** — ingredients, method, yield, times — and
   is explicitly told to ignore the headnote and the author's prose. That is a rights
   posture as much as a product one (05-SOURCES-AND-RIGHTS.md), and it is not decoration.
+- **The tab bar is on EVERY screen**, nested ones included — a book, an edit form, the
+  camera, the parse screen. Alisa asked for it (2026-08-16) and she is right: a screen you
+  can only leave by finding the one back arrow you happen to be looking at is a screen you
+  can get stuck in. `Screen`'s `tabs` prop survives as an escape hatch but nothing passes it.
+- **`Screen`'s `onLeave` is what makes that safe.** Return false and the tab tap is
+  cancelled. Three screens hold work that is not on disk yet and all three use it:
+  `RecipeParse` (photographed pages and a pasted reply live only in component state),
+  `RecipeEdit` and `BookEdit`. Without it, one stray thumb on "Dinner" silently bins a parse
+  she has not checked — the verification gate would be intact and the work gone anyway.
+  Dirtiness is tracked from real DOM `onInput`/`onChange` on the form wrapper, NOT threaded
+  through every setter: loading a recipe calls those setters too, and a form that marks
+  itself dirty just by opening nags on every exit. An unsaved **parse** always asks, typed
+  or not, because it is gone the moment the screen unmounts. Tapping the tab you are already
+  on never asks.
 - **The box is suggested, never applied silently.** Capture runs `platform/camera.ts`
   `findTextBox`, which hands a small greyscale copy to `lib/ink.ts` and gets back a
   rectangle. It is drawn into the draggable box with "Whole page" to undo and "Find the

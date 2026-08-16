@@ -31,6 +31,14 @@ export default function BookEdit() {
   const [shelfNote, setShelfNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  /** Typed-in, not loaded-in: real DOM input events only. See RecipeEdit for the why. */
+  const [dirty, setDirty] = useState(false)
+
+  /** The tab bar reaches this screen now, so a half-filled book is one tap from gone. */
+  function confirmLeave(): boolean {
+    if (saving || !dirty) return true
+    return confirm('Leave without saving? Your changes will be lost.')
+  }
 
   useEffect(() => {
     if (!uuid) return
@@ -100,11 +108,10 @@ export default function BookEdit() {
     navigate('/books', { replace: true })
   }
 
-  if (!loaded) return <Screen tabs={false}>{null}</Screen>
+  if (!loaded) return <Screen>{null}</Screen>
 
   return (
     <Screen
-      tabs={false}
       header={
         <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-[18px]">
           <button
@@ -122,8 +129,13 @@ export default function BookEdit() {
           </Button>
         </div>
       }
+      onLeave={confirmLeave}
     >
-      <div className="flex flex-col gap-[18px] px-5 pb-10 pt-5">
+      <div
+        onInput={() => setDirty(true)}
+        onChange={() => setDirty(true)}
+        className="flex flex-col gap-[18px] px-5 pb-10 pt-5"
+      >
         <Input
           label="Title"
           serif

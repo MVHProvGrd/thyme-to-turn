@@ -12,7 +12,14 @@ export const TABS = [
   { to: '/settings', label: 'Settings', match: ['/settings'] },
 ]
 
-export default function TabBar({ active }: { active: string }) {
+export default function TabBar({
+  active,
+  onLeave,
+}: {
+  active: string
+  /** Return false to cancel the tap, for a screen holding work that is not saved yet. */
+  onLeave?: () => boolean
+}) {
   return (
     <nav className="flex shrink-0 border-t border-rule bg-paper" aria-label="Sections">
       {TABS.map((tab) => {
@@ -22,6 +29,10 @@ export default function TabBar({ active }: { active: string }) {
             key={tab.to}
             to={tab.to}
             aria-current={isActive ? 'page' : undefined}
+            onClick={(event) => {
+              // Already here: don't make her confirm leaving for a tap that goes nowhere.
+              if (!isActive && onLeave && !onLeave()) event.preventDefault()
+            }}
             className={`flex min-h-[56px] flex-1 items-center justify-center font-mono text-[11px] uppercase tracking-[0.1em] focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-thyme ${
               isActive
                 ? 'font-semibold text-thyme shadow-[inset_0_2px_0_#7FB03F]'

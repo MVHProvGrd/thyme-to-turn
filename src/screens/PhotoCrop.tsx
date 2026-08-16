@@ -100,7 +100,6 @@ export default function PhotoCrop() {
 
   return (
     <Screen
-      tabs={false}
       header={
         <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-[18px]">
           <button

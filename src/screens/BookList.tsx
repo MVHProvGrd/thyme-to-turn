@@ -14,7 +14,6 @@ export default function BookList() {
 
   return (
     <Screen
-      tabs={false}
       header={
         <div className="px-5 pb-[14px] pt-[22px]">
           <div className="flex items-start justify-between gap-3">
