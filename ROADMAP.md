@@ -5,6 +5,22 @@ Ideas land here, not in the current branch. Newest at top.
 The habit is the point: every project in this workbench that stayed shippable kept one of
 these, and the one that didn't turned into a six-month project that didn't work yet.
 
+## After phase 4 — the honest gaps
+
+- **The live parse has never been run.** It needs Alisa's own API key, which this project
+  must never hold. First real test: her key in Settings, one photo of a page she knows,
+  and check what comes back against the printed page.
+- Measure parse quality on ten photos from three books, then try `claude-haiku-4-5` on the
+  same ten and compare. Measure, then downgrade — never the other way round.
+- Ingredient group headings ("For the crust") survive the parse but the edit screen still
+  has no way to show them, so they collapse into one list on save. The cook view already
+  renders groups; the edit form is the gap.
+- A page photo's crop is still whole-image only. Boxing the recipe before sending would
+  improve the parse and roughly halve the image tokens — `PhotoCrop` is square-only and
+  destructive, so a page needs the non-destructive rect path instead.
+- The dinner tally reads "104 recipes · 104 ready" before she marks anything; `READY TO
+  COOK` has the same problem at cold start.
+
 ## Came up while adding categories
 
 - The dinner tally reads "104 recipes · 104 ready · 0 ruled out" before she marks anything.
