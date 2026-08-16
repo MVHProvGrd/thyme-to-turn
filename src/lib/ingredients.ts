@@ -93,7 +93,7 @@ const PREPARATIONS = new Set([
   'dried', 'ground', 'grated', 'sliced', 'diced', 'minced', 'crushed', 'peeled', 'seeded',
   'pitted', 'trimmed', 'rinsed', 'drained', 'sifted', 'melted', 'softened', 'chilled',
   'room', 'temperature', 'large', 'small', 'medium', 'good', 'quality', 'ripe', 'plus',
-  'more', 'extra', 'about', 'approximately', 'or', 'and', 'a', 'an', 'the', 'of', 'to',
+  'more', 'extra', 'about', 'approximately', 'or', 'either', 'and', 'a', 'an', 'the', 'of', 'to',
   'for', 'into', 'well', 'lightly', 'very', 'plenty', 'few', 'some', 'preferably',
   'roasted', 'toasted', 'cooked', 'raw', 'whole', 'halved', 'quartered', 'cut', 'torn',
   'shredded', 'julienned', 'washed', 'scrubbed', 'stemmed', 'boneless', 'skinless',
@@ -175,6 +175,52 @@ export function normalize(name: string): string {
     if (words.length > 0) return words.join(' ')
   }
   return ''
+}
+
+/**
+ * "minced or ground lamb or beef" → `["lamb", "beef"]`
+ *
+ * A line that offers a choice needs to match on ANY of them, not on some mashed-together
+ * string. Today that line canonicalised to "lamb beef" and matched nothing at all — the
+ * silent miss this whole area exists to prevent.
+ *
+ * Why it lands on two names and not four: `minced` and `ground` are the same thing said
+ * in two places, and both are already preparation words, so they normalize away. What is
+ * left is the choice that actually matters — which animal.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO: complete a shared head noun. "vegetable or chicken
+ * stock" gives `["vegetable", "chicken stock"]`, not `["vegetable stock", "chicken
+ * stock"]`. The rule that would fix it — "borrow the last alternative's trailing word" —
+ * turns "butter or olive oil" into "butter oil", and a confidently wrong match is worse
+ * than a loose one. A loose alternative just sits in the registry unused while the other
+ * alternative still matches; a wrong one puts a recipe she cannot cook at the top of the
+ * list. Completing the head noun needs the page, which is why the AI is asked to write
+ * each alternative out in full (api/prompts.ts).
+ */
+export function splitAlternatives(name: string): string[] {
+  // "milk/cream" is the same offer with different punctuation. The letter on each side
+  // keeps a fraction like "1/2" out of it.
+  const text = fold(name).replace(/([a-z])\s*\/\s*(?=[a-z])/g, '$1 or ')
+  const seen = new Set<string>()
+  const names: string[] = []
+  for (const part of text.split(/\s+or\s+/)) {
+    const key = normalize(part)
+    if (key && !seen.has(key)) {
+      seen.add(key)
+      names.push(key)
+    }
+  }
+  return names
+}
+
+/** Every canonical name that satisfies one ingredient line. Empty when it has none. */
+export function ingredientNames(item: Ingredient): string[] {
+  return item.canonical ? [item.canonical, ...(item.alternatives ?? [])] : []
+}
+
+/** "lamb or beef" — how a line with a choice in it reads on a card. */
+export function choiceLabel(names: string[]): string {
+  return names.join(' or ')
 }
 
 /** "1½" → 1.5 · "1 1/2" → 1.5 · "2-3" → 2 (the low end; she can read the raw line). */
@@ -265,7 +311,15 @@ export function parseIngredientLine(raw: string): Ingredient {
       .replace(/\s+/g, ' ')
       .trim() || undefined
 
-  const canonical = normalize(item || rest)
+  const names = splitAlternatives(item || rest)
+  // "1 cup flour, or cornstarch" puts the choice after the comma, where the note lives.
+  // The note keeps its printed wording; the alternative it names still counts.
+  if (note && /^or\b/i.test(note)) {
+    for (const extra of splitAlternatives(note.replace(/^\s*or\b/i, ' '))) {
+      if (!names.includes(extra)) names.push(extra)
+    }
+  }
+  const [canonical, ...alternatives] = names
 
   return {
     raw: trimmed,
@@ -273,6 +327,7 @@ export function parseIngredientLine(raw: string): Ingredient {
     ...(unit ? { unit } : {}),
     ...(item ? { item } : {}),
     ...(canonical ? { canonical } : {}),
+    ...(alternatives.length ? { alternatives } : {}),
     ...(note ? { note } : {}),
     ...(optional ? { optional: true } : {}),
   }
@@ -284,11 +339,42 @@ export function canonicalNames(groups: { items: Ingredient[] }[]): string[] {
   const out: string[] = []
   for (const group of groups) {
     for (const ingredient of group.items) {
-      const key = ingredient.canonical ?? normalize(ingredient.item ?? ingredient.raw)
-      if (key && !seen.has(key)) {
-        seen.add(key)
-        out.push(key)
+      for (const key of namesFor(ingredient)) {
+        if (!seen.has(key)) {
+          seen.add(key)
+          out.push(key)
+        }
       }
+    }
+  }
+  return out
+}
+
+/** The stored names if they're there, else derived from `raw` — for rows written before. */
+function namesFor(ingredient: Ingredient): string[] {
+  const stored = ingredientNames(ingredient)
+  if (stored.length) return stored
+  return splitAlternatives(ingredient.item ?? ingredient.raw)
+}
+
+/**
+ * One entry per ingredient LINE, holding the names any one of which satisfies it.
+ *
+ * This is the shape the pantry match needs and the flat `canonicalNames` list can't carry:
+ * "lamb or beef" is one requirement with two answers, not two requirements. Lines with no
+ * usable name are dropped, and two lines asking for the same thing collapse into one.
+ */
+export function choiceNames(groups: { items: Ingredient[] }[]): string[][] {
+  const seen = new Set<string>()
+  const out: string[][] = []
+  for (const group of groups) {
+    for (const ingredient of group.items) {
+      const names = namesFor(ingredient)
+      if (names.length === 0) continue
+      const key = names.join('|')
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(names)
     }
   }
   return out

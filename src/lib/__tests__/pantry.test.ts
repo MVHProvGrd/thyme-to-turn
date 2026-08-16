@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { matchPantry, nextQuestions, shortlist, stateFor } from '../pantry'
+import { matchPantry, nextQuestions, shortlist, stateFor, stateForNames } from '../pantry'
 import type { IngredientState } from '../pantry'
 import type { IngredientEntry, Recipe } from '../types'
+
+/**
+ * `missing` and `notSure` are lists of CHOICES — one entry per ingredient line, each
+ * holding every name that would satisfy it ("lamb or beef"). These assertions are about
+ * which lines are still open, so they compare the printed labels.
+ */
+const labelsOf = (choices: { label: string }[]) => choices.map((c) => c.label)
 
 /**
  * The tests for the feature where a wrong answer is invisible: she just never sees a
@@ -44,6 +51,11 @@ const REGISTRY: IngredientEntry[] = [
   entry('scallion', { aliases: ['spring onion', 'green onion'] }),
   entry('parsley'),
   entry('spring onion', { uuid: 'id:spring-onion-separate' }),
+  entry('lamb'),
+  entry('beef'),
+  entry('butter', { isStaple: true }),
+  entry('margarine'),
+  entry('rice'),
 ]
 
 /** Build a recipe from ingredient names. `?name` marks that line optional. */
@@ -69,6 +81,40 @@ function recipe(title: string, names: string[], registry = REGISTRY): Recipe {
     tags: [],
     photos: [],
     ingredientIndex: [...new Set(ingredientIndex)],
+    verified: true,
+  }
+}
+
+/**
+ * A recipe whose lines can offer a choice: `['rice', ['lamb', 'beef']]` is two lines, the
+ * second satisfied by either. This is the shape `db/repo.ts` writes for a page that says
+ * "minced or ground lamb or beef".
+ */
+function choiceRecipe(title: string, lines: (string | string[])[], registry = REGISTRY): Recipe {
+  const uuidFor = (name: string) => {
+    const hit = registry.find((e) => e.canonical === name || e.aliases.includes(name))
+    return hit ? hit.uuid : `unresolved:${name}`
+  }
+  const groups = lines.map((line) => (Array.isArray(line) ? line : [line]))
+  const items = groups.map(([canonical, ...alternatives]) => ({
+    raw: [canonical, ...alternatives].join(' or '),
+    item: [canonical, ...alternatives].join(' or '),
+    canonical,
+    ...(alternatives.length ? { alternatives } : {}),
+  }))
+  const ingredientChoices = groups.map((names) => names.map(uuidFor))
+  return {
+    uuid: `r:${title}`,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    title,
+    source: { kind: 'other' },
+    ingredients: [{ items }],
+    steps: [],
+    tags: [],
+    photos: [],
+    ingredientIndex: [...new Set(ingredientChoices.flat())],
+    ingredientChoices,
     verified: true,
   }
 }
@@ -102,17 +148,17 @@ function byTitle(matches: ReturnType<typeof matchPantry>, title: string) {
 describe('matchPantry: what counts as required', () => {
   it('excludes staples from the requirement', () => {
     const [m] = matchPantry([roastChicken], {}, REGISTRY)
-    expect(m.notSure).toEqual(['chicken', 'fennel', 'bread'])
-    expect(m.notSure).not.toContain('salt')
-    expect(m.notSure).not.toContain('olive oil')
+    expect(labelsOf(m.notSure)).toEqual(['chicken', 'fennel', 'bread'])
+    expect(labelsOf(m.notSure)).not.toContain('salt')
+    expect(labelsOf(m.notSure)).not.toContain('olive oil')
   })
 
   it('excludes optional lines - garnishes never block feasibility', () => {
     const [m] = matchPantry([lentilSoup], {}, REGISTRY)
-    expect(m.notSure).toEqual(['lentil', 'onion', 'garlic'])
+    expect(labelsOf(m.notSure)).toEqual(['lentil', 'onion', 'garlic'])
     // Even ruled out, a garnish costs nothing.
     const [ruled] = matchPantry([lentilSoup], states({ parsley: 'dontHave' }), REGISTRY)
-    expect(ruled.missing).toEqual([])
+    expect(labelsOf(ruled.missing)).toEqual([])
   })
 
   it('excludes a recipe with unresolved ingredient ids - never claims it ready', () => {
@@ -170,27 +216,27 @@ describe('matchPantry: how a mark reaches an ingredient', () => {
     const registry = [...REGISTRY, entry('flour', { isStaple: true })]
     const scallionPancake = recipe('Scallion pancake', ['scallion', 'flour'], registry)
     const [m] = matchPantry([scallionPancake], { 'id:spring-onion-separate': 'dontHave' }, registry)
-    expect(m.missing).toEqual(['scallion'])
+    expect(labelsOf(m.missing)).toEqual(['scallion'])
     const [have] = matchPantry([scallionPancake], { 'id:spring-onion-separate': 'have' }, registry)
-    expect(have.missing).toEqual([])
-    expect(have.notSure).toEqual([])
+    expect(labelsOf(have.missing)).toEqual([])
+    expect(labelsOf(have.notSure)).toEqual([])
   })
 
   it('prefix hit: `chicken` satisfies `chicken thigh`', () => {
     const [m] = matchPantry([chickenThighs], states({ chicken: 'have' }), REGISTRY)
-    expect(m.notSure).toEqual(['onion', 'cream'])
+    expect(labelsOf(m.notSure)).toEqual(['onion', 'cream'])
     const [out] = matchPantry([chickenThighs], states({ chicken: 'dontHave' }), REGISTRY)
-    expect(out.missing).toEqual(['chicken thigh'])
+    expect(labelsOf(out.missing)).toEqual(['chicken thigh'])
   })
 
   it('prefix miss: `chick` must not match `chicken`, and `chicken` must not match `chickpea`', () => {
     const chick = entry('chick', { uuid: 'id:chick' })
     const registry = [...REGISTRY, chick]
     const [m] = matchPantry([roastChicken], { 'id:chick': 'dontHave' }, registry)
-    expect(m.missing).toEqual([])
+    expect(labelsOf(m.missing)).toEqual([])
     const [stew] = matchPantry([chickpeaStew], states({ chicken: 'dontHave' }), REGISTRY)
-    expect(stew.missing).toEqual([])
-    expect(stew.notSure).toContain('chickpea')
+    expect(labelsOf(stew.missing)).toEqual([])
+    expect(labelsOf(stew.notSure)).toContain('chickpea')
   })
 
   it('a mark on chicken does NOT reach chicken stock — the shrimp-recipe bug', () => {
@@ -201,7 +247,7 @@ describe('matchPantry: how a mark reaches an ingredient', () => {
 
     const [bisque] = matchPantry([shrimp], marks, registry)
     expect(bisque.confirmed).toEqual([]) // stock is a different thing on the shelf
-    expect(bisque.notSure).toEqual(['shrimp', 'chicken stock'])
+    expect(labelsOf(bisque.notSure)).toEqual(['shrimp', 'chicken stock'])
 
     const [braised] = matchPantry([thighs], marks, registry)
     expect(braised.confirmed).toEqual(['chicken thigh']) // a cut still matches
@@ -215,12 +261,12 @@ describe('matchPantry: how a mark reaches an ingredient', () => {
   it('a direct mark on the specific entry beats a prefix mark on the general one', () => {
     const marks = states({ chicken: 'have', 'chicken thigh': 'dontHave' })
     const [m] = matchPantry([chickenThighs], marks, REGISTRY)
-    expect(m.missing).toEqual(['chicken thigh'])
+    expect(labelsOf(m.missing)).toEqual(['chicken thigh'])
   })
 
   it('ignores marks on uuids the registry does not know', () => {
     const [m] = matchPantry([lentilSoup], { 'id:nobody': 'dontHave' }, REGISTRY)
-    expect(m.missing).toEqual([])
+    expect(labelsOf(m.missing)).toEqual([])
   })
 })
 
@@ -250,9 +296,9 @@ describe('matchPantry: the two filters, live at once', () => {
     const after = matchPantry(RECIPES, states({ garlic: 'dontHave' }), REGISTRY)
     for (const m of after) {
       const was = byTitle(before, m.recipe.title)
-      const needsGarlic = was.notSure.includes('garlic')
-      expect(m.missing).toEqual(needsGarlic ? ['garlic'] : [])
-      expect(m.notSure).toEqual(was.notSure.filter((n) => n !== 'garlic'))
+      const needsGarlic = labelsOf(was.notSure).includes('garlic')
+      expect(labelsOf(m.missing)).toEqual(needsGarlic ? ['garlic'] : [])
+      expect(labelsOf(m.notSure)).toEqual(labelsOf(was.notSure).filter((n) => n !== 'garlic'))
     }
     expect(after.filter((m) => m.missing.length === 1).map((m) => m.recipe.title).sort()).toEqual([
       'Chickpea stew',
@@ -267,9 +313,9 @@ describe('matchPantry: the two filters, live at once', () => {
     const after = matchPantry(RECIPES, { ...marks, ...states({ onion: 'have' }) }, REGISTRY)
     for (const m of after) {
       const was = byTitle(before, m.recipe.title)
-      expect(m.missing).toEqual(was.missing)
-      expect(m.notSure).not.toContain('onion')
-      expect(m.notSure).toEqual(was.notSure.filter((n) => n !== 'onion'))
+      expect(labelsOf(m.missing)).toEqual(labelsOf(was.missing))
+      expect(labelsOf(m.notSure)).not.toContain('onion')
+      expect(labelsOf(m.notSure)).toEqual(labelsOf(was.notSure).filter((n) => n !== 'onion'))
     }
   })
 
@@ -405,5 +451,100 @@ describe('stateFor: the detail screen asks the same engine', () => {
     expect(stateFor(byName('scallion'), marks, REGISTRY)).toBe('dontHave')
     expect(stateFor(byName('chickpea'), marks, REGISTRY)).toBe('unknown')
     expect(stateFor(byName('onion'), marks, REGISTRY)).toBe('unknown')
+  })
+})
+
+/**
+ * A line that offers a choice — "minced or ground lamb or beef".
+ *
+ * It is ONE requirement with several answers. The failure this block exists to prevent is
+ * the silent one: she says "no beef", and a recipe that would happily take the lamb
+ * disappears from the list without ever telling her why.
+ */
+describe('alternatives: any one of them satisfies the line', () => {
+  const kofta = choiceRecipe('Kofta', ['onion', ['lamb', 'beef']])
+  const cake = choiceRecipe('Cake', [['butter', 'margarine'], 'rice'])
+  const only = [kofta]
+
+  it('ruling out ONE option leaves the line open, not missing', () => {
+    const [m] = matchPantry(only, states({ beef: 'dontHave' }), REGISTRY)
+    expect(labelsOf(m.missing)).toEqual([])
+    expect(labelsOf(m.notSure)).toContain('lamb or beef')
+  })
+
+  it('ruling out EVERY option is what makes it missing, and it says so in full', () => {
+    const [m] = matchPantry(only, states({ beef: 'dontHave', lamb: 'dontHave' }), REGISTRY)
+    expect(labelsOf(m.missing)).toEqual(['lamb or beef'])
+    expect(m.missing[0].primary).toBe('lamb')
+    expect(m.missing[0].uuids).toEqual(['id:lamb', 'id:beef'])
+  })
+
+  it('having either one confirms the line', () => {
+    for (const name of ['lamb', 'beef']) {
+      const [m] = matchPantry(only, states({ [name]: 'have' }), REGISTRY)
+      expect(m.confirmed).toEqual([name])
+      expect(labelsOf(m.notSure)).toEqual(['onion'])
+    }
+  })
+
+  it('one confirmed option counts as one mark used, not two', () => {
+    const [m] = matchPantry(only, states({ lamb: 'have' }), REGISTRY)
+    expect(m.matched).toBe(1)
+  })
+
+  it('a staple among the options satisfies the line outright', () => {
+    // butter is a staple, so "butter or margarine" is never a question.
+    const [m] = matchPantry([cake], {}, REGISTRY)
+    expect(labelsOf(m.notSure)).toEqual(['rice'])
+  })
+
+  it('the grid can still ask about either option', () => {
+    const matches = matchPantry(only, {}, REGISTRY)
+    const asked = nextQuestions(matches, REGISTRY, {}).map((e) => e.canonical)
+    expect(asked).toContain('lamb')
+    expect(asked).toContain('beef')
+  })
+
+  it('stops asking about an option she has already answered', () => {
+    const marks = states({ lamb: 'dontHave' })
+    const matches = matchPantry(only, marks, REGISTRY)
+    const asked = nextQuestions(matches, REGISTRY, marks).map((e) => e.canonical)
+    expect(asked).not.toContain('lamb')
+    expect(asked).toContain('beef')
+  })
+
+  it('a have mark never increases the missing count — the regression test, with choices', () => {
+    const marks = states({ beef: 'dontHave' })
+    const before = matchPantry(only, marks, REGISTRY)
+    for (const e of REGISTRY) {
+      const after = matchPantry(only, { ...marks, [e.uuid]: 'have' }, REGISTRY)
+      expect(after[0].missing.length).toBeLessThanOrEqual(before[0].missing.length)
+    }
+  })
+
+  it('recipes saved before choices existed match exactly as they did', () => {
+    // No ingredientChoices on the row at all: every indexed ingredient is its own
+    // requirement, which is what those recipes always meant.
+    const legacy = recipe('Legacy', ['onion', 'garlic'])
+    expect(legacy.ingredientChoices).toBeUndefined()
+    const [m] = matchPantry([legacy], states({ garlic: 'dontHave' }), REGISTRY)
+    expect(labelsOf(m.missing)).toEqual(['garlic'])
+    expect(labelsOf(m.notSure)).toEqual(['onion'])
+  })
+})
+
+describe('stateForNames: one row on the recipe screen', () => {
+  it('is had when she has any option, and out only when she has ruled out all of them', () => {
+    expect(stateForNames(['lamb', 'beef'], states({ beef: 'have' }), REGISTRY)).toBe('have')
+    expect(stateForNames(['lamb', 'beef'], states({ beef: 'dontHave' }), REGISTRY)).toBe('unknown')
+    expect(
+      stateForNames(['lamb', 'beef'], states({ beef: 'dontHave', lamb: 'dontHave' }), REGISTRY),
+    ).toBe('dontHave')
+  })
+
+  it('ignores staples and unknown names rather than inventing an answer', () => {
+    expect(stateForNames(['salt'], states({ garlic: 'dontHave' }), REGISTRY)).toBe('unknown')
+    expect(stateForNames(['unobtainium'], {}, REGISTRY)).toBe('unknown')
+    expect(stateForNames([], {}, REGISTRY)).toBe('unknown')
   })
 })

@@ -13,6 +13,15 @@
  * the voice around the recipe: that is the most creative and most protected part of the
  * page, it is not needed in a search index, and the photo is right there if she wants to
  * read it (05-SOURCES-AND-RIGHTS.md). This rule is load-bearing, not decoration.
+ *
+ * WHERE THE MATCH KEYS ACTUALLY COME FROM. `canonical` and `alternatives` are asked for
+ * here, and the schema guarantees them — but on the way into the database `db/repo.ts`
+ * re-derives both from `raw` (`lib/ingredients.ts`), and the "Re-check matching" button
+ * re-derives them again later. `raw` is the single source of truth, deliberately: a stored
+ * key that only one of the two paths can produce would drift the first time she pressed
+ * that button. What these fields are for is the answer itself — the JSON she hands to
+ * whatever assistant she already uses is a document in its own right, and it has to be
+ * right there too.
  */
 
 import type { ParsedRecipe } from '../lib/types'
@@ -45,6 +54,13 @@ INGREDIENT LINES.
   - null is correct when the line is not a discrete ingredient ("a little water for the pan").
 - Set optional true for garnishes and anything "to serve", "to taste" or explicitly optional. They must not make a recipe look impossible to cook.
 
+A LINE THAT OFFERS A CHOICE.
+- When a line names things that can stand in for each other — "butter or margarine", "vegetable or chicken stock", "milk/cream" — put the FIRST option in "canonical" and every other one in "alternatives". One line, several answers: the cook needs any ONE of them.
+- WRITE EACH ALTERNATIVE OUT IN FULL, even where the page shares a word between them. "vegetable or chicken stock" gives canonical "vegetable stock" with alternatives ["chicken stock"] — never the bare word "vegetable". Only a reader who can see the page can restore a shared head noun; anything working from the line alone has to guess, and a guess here is a recipe someone is told they can cook and cannot.
+- A choice of PREPARATION is not a choice of ingredient. "minced or ground lamb or beef" is lamb OR beef — minced and ground are the same thing said differently either side of the Atlantic, and neither belongs in a match key. So: canonical "lamb", alternatives ["beef"]. Likewise "chopped or sliced onions" is just "onion", with no alternatives at all.
+- Only for genuine substitutes. "salt and pepper" is two ingredients, not a choice. "2 lemons, or 1 tbsp juice" is one ingredient described twice — canonical "lemon", no alternatives.
+- Leave "alternatives" as an empty array on every ordinary line. Most lines are ordinary.
+
 REPORT YOUR OWN DOUBT.
 - Put a dotted path into lowConfidenceFields for anything you could not read cleanly: "title", "ingredients.0.quantity", "steps.3". Blur, a curved gutter, a cut-off line, an ambiguous fraction — all belong there.
 - Guessing silently is the one unrecoverable mistake. Flagging is free.`
@@ -76,7 +92,18 @@ Reply with ONLY this JSON object. No explanation before it, no summary after it:
           "unit": "cup",
           "item": "all-purpose flour",
           "canonical": "flour",
+          "alternatives": [],
           "note": "sifted",
+          "optional": false
+        },
+        {
+          "raw": "500 g minced or ground lamb or beef",
+          "quantity": 500,
+          "unit": "g",
+          "item": "minced or ground lamb or beef",
+          "canonical": "lamb",
+          "alternatives": ["beef"],
+          "note": null,
           "optional": false
         }
       ]
@@ -128,13 +155,28 @@ export const RECIPE_SCHEMA = {
             items: {
               type: 'object',
               additionalProperties: false,
-              required: ['raw', 'quantity', 'unit', 'item', 'canonical', 'note', 'optional'],
+              required: [
+                'raw',
+                'quantity',
+                'unit',
+                'item',
+                'canonical',
+                'alternatives',
+                'note',
+                'optional',
+              ],
               properties: {
                 raw: { type: 'string', description: 'The line exactly as printed.' },
                 quantity: { type: ['number', 'null'] },
                 unit: { type: ['string', 'null'] },
                 item: { type: ['string', 'null'] },
                 canonical: { type: ['string', 'null'] },
+                alternatives: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description:
+                    'Stand-ins for canonical when the line offers a choice: "butter or margarine" gives ["margarine"]. Each written out in full, never a shared word on its own. Empty on an ordinary line.',
+                },
                 note: { type: ['string', 'null'] },
                 optional: { type: 'boolean' },
               },

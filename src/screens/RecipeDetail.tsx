@@ -10,8 +10,8 @@ import { SCALE_STEPS, displayAmount, formatNumber, scaleYield } from '../lib/sca
 import { ParseError, parseRecipePhotos } from '../api/claude'
 import { hasApiKey } from '../api/key'
 import { prepareImage } from '../platform/camera'
-import { formatUnit } from '../lib/ingredients'
-import { stateFor } from '../lib/pantry'
+import { formatUnit, ingredientNames } from '../lib/ingredients'
+import { stateForNames } from '../lib/pantry'
 import type { IngredientState } from '../lib/pantry'
 import type { Ingredient, IngredientEntry } from '../lib/types'
 import { readPref, readSession, writePref } from '../platform/prefs'
@@ -410,10 +410,10 @@ function markFor(
   marks: Record<string, IngredientState>,
   registry: IngredientEntry[],
 ): IngredientState {
-  const canonical = item.canonical
-  if (!canonical || registry.length === 0) return 'unknown'
-  const entry = registry.find((e) => e.canonical === canonical || e.aliases.includes(canonical))
-  if (!entry || entry.isStaple) return 'unknown'
-  return stateFor(entry, marks, registry)
+  // A line offering a choice is only "missing" once she has ruled out every option —
+  // the same rule the dinner screen used, so the two never disagree about one row.
+  const names = ingredientNames(item)
+  if (names.length === 0 || registry.length === 0) return 'unknown'
+  return stateForNames(names, marks, registry)
 }
 

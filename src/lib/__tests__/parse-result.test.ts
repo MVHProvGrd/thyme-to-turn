@@ -21,6 +21,7 @@ const line = (raw: string, extra: Record<string, unknown> = {}) => ({
   unit: null,
   item: null,
   canonical: null,
+  alternatives: [] as string[],
   note: null,
   optional: false,
   ...extra,

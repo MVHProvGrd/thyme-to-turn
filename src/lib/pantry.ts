@@ -22,10 +22,35 @@
  * this whole file exists to prevent.
  */
 
-import { coversByPrefix } from './ingredients'
-import type { IngredientEntry, Recipe } from './types'
+import { choiceLabel, coversByPrefix, ingredientNames } from './ingredients'
+import type { IngredientEntry, Recipe, Uuid } from './types'
 
 export type IngredientState = 'have' | 'dontHave' | 'unknown'
+
+/**
+ * One ingredient line, and every registry entry that would satisfy it.
+ *
+ * "minced or ground lamb or beef" is ONE requirement with TWO answers. It is confirmed if
+ * she has either, and it is only `missing` once she has ruled out every one of them —
+ * which is the whole point: saying "no beef" must not hide a recipe that would happily
+ * take the lamb.
+ */
+export type Choice = {
+  /** "lamb or beef" — what the card prints. */
+  label: string
+  /** The name a `+` tap should mark as had: the line's own first choice. */
+  primary: string
+  /** Registry uuids, in the line's printed order. */
+  uuids: Uuid[]
+}
+
+/**
+ * A recipe's requirements as lines. Recipes written before `ingredientChoices` existed get
+ * one choice per indexed ingredient, which is exactly what they meant.
+ */
+export function choicesOf(recipe: Recipe): Uuid[][] {
+  return recipe.ingredientChoices ?? recipe.ingredientIndex.map((uuid) => [uuid])
+}
 
 export type Match = {
   recipe: Recipe
@@ -38,10 +63,16 @@ export type Match = {
    * your 3". This is the number the filter and the tally use.
    */
   matched: number
-  /** Canonical names she ruled out. Hard — she told us. */
-  missing: string[]
-  /** Canonical names she never mentioned. Soft — she has forty things in that kitchen. */
-  notSure: string[]
+  /** Lines where she ruled out EVERY option. Hard — she told us. */
+  missing: Choice[]
+  /** Lines she never mentioned. Soft — she has forty things in that kitchen. */
+  notSure: Choice[]
+  /**
+   * Registry uuids still unanswered on this recipe, across `missing` and `notSure`. What
+   * `nextQuestions` is allowed to ask about — uuids rather than names, so an entry found
+   * through an alias is still askable.
+   */
+  open: Uuid[]
   /** confirmed / required. 1 when nothing is required. Reported, not sorted on. */
   coverage: number
 }
@@ -122,6 +153,34 @@ export function stateFor(
   return resolveState(entry, states, collectMarks(states, registry)).state
 }
 
+/**
+ * The same answer for a line that offers a choice: `have` if she has any of them,
+ * `dontHave` only once she has ruled out all of them, `unknown` otherwise.
+ *
+ * Used by the recipe screen so an ingredient row and the dinner screen never disagree —
+ * one resolution, two places that show it.
+ */
+export function stateForNames(
+  names: string[],
+  states: Record<string, IngredientState>,
+  registry: IngredientEntry[],
+): IngredientState {
+  const marks = collectMarks(states, registry)
+  const entries = names.flatMap((name) => {
+    const entry = registry.find((e) => e.canonical === name || e.aliases.includes(name))
+    return entry && !entry.isStaple ? [entry] : []
+  })
+  if (entries.length === 0) return 'unknown'
+
+  let allOut = true
+  for (const entry of entries) {
+    const { state } = resolveState(entry, states, marks)
+    if (state === 'have') return 'have'
+    if (state !== 'dontHave') allOut = false
+  }
+  return allOut ? 'dontHave' : 'unknown'
+}
+
 function collectMarks(states: Record<string, IngredientState>, registry: IngredientEntry[]): Mark[] {
   const byUuid = new Map(registry.map((e) => [e.uuid, e]))
   const marks: Mark[] = []
@@ -141,9 +200,10 @@ function optionalOnly(recipe: Recipe): Set<string> {
   const optional = new Set<string>()
   for (const group of recipe.ingredients) {
     for (const item of group.items) {
-      if (!item.canonical) continue
-      if (item.optional) optional.add(item.canonical)
-      else required.add(item.canonical)
+      for (const name of ingredientNames(item)) {
+        if (item.optional) optional.add(name)
+        else required.add(name)
+      }
     }
   }
   for (const name of required) optional.delete(name)
@@ -183,35 +243,67 @@ export function matchPantry(
   for (const recipe of recipes) {
     const skip = optionalOnly(recipe)
     const confirmed: string[] = []
-    const missing: string[] = []
-    const notSure: string[] = []
+    const missing: Choice[] = []
+    const notSure: Choice[] = []
+    const open: Uuid[] = []
     // Which of HER marks this recipe actually uses, deduped — one mark reaching two
     // ingredients by prefix is still one thing she picked.
     const satisfied = new Set<string>()
     let unresolved = false
 
-    for (const uuid of recipe.ingredientIndex) {
-      const entry = byUuid.get(uuid)
-      if (!entry) {
-        unresolved = true
-        break
+    for (const uuids of choicesOf(recipe)) {
+      const entries: IngredientEntry[] = []
+      for (const uuid of uuids) {
+        const entry = byUuid.get(uuid)
+        if (!entry) {
+          unresolved = true
+          break
+        }
+        entries.push(entry)
       }
-      if (entry.isStaple) continue
-      if (namesOf(entry).some((n) => skip.has(n))) continue
+      if (unresolved) break
+      if (entries.length === 0) continue
 
-      const { state, via } = resolveState(entry, states, marks)
-      if (state === 'have') {
-        confirmed.push(entry.canonical)
-        if (via) satisfied.add(via)
-      } else if (state === 'dontHave') missing.push(entry.canonical)
-      else notSure.push(entry.canonical)
+      // A staple among the options satisfies the line outright — it is assumed present,
+      // which is exactly what "butter or margarine" needs when butter is a staple.
+      if (entries.some((entry) => entry.isStaple)) continue
+      if (entries.every((entry) => namesOf(entry).some((n) => skip.has(n)))) continue
+
+      // ANY of them satisfies the line; it is only missing once she has ruled out ALL of
+      // them. Saying "no beef" must not hide a recipe that would take the lamb.
+      let had: { name: string; via?: string } | undefined
+      const stillOpen: Uuid[] = []
+      for (const entry of entries) {
+        const { state, via } = resolveState(entry, states, marks)
+        if (state === 'have') {
+          if (!had) had = { name: entry.canonical, via }
+        } else if (state === 'unknown') stillOpen.push(entry.uuid)
+      }
+
+      if (had) {
+        confirmed.push(had.name)
+        if (had.via) satisfied.add(had.via)
+        continue
+      }
+
+      const choice: Choice = {
+        label: choiceLabel(entries.map((entry) => entry.canonical)),
+        primary: entries[0].canonical,
+        uuids: entries.map((entry) => entry.uuid),
+      }
+      if (stillOpen.length > 0) {
+        notSure.push(choice)
+        open.push(...stillOpen)
+      } else {
+        missing.push(choice)
+      }
     }
     if (unresolved) continue
 
     const required = confirmed.length + missing.length + notSure.length
     const coverage = required === 0 ? 1 : confirmed.length / required
 
-    matches.push({ recipe, confirmed, matched: satisfied.size, missing, notSure, coverage })
+    matches.push({ recipe, confirmed, matched: satisfied.size, missing, notSure, open, coverage })
   }
 
   matches.sort(
@@ -274,20 +366,20 @@ export function nextQuestions(
 ): IngredientEntry[] {
   if (candidates.length === 0 || n <= 0) return []
 
-  const byCanonical = new Map(registry.map((e) => [e.canonical, e]))
+  const byUuid = new Map(registry.map((e) => [e.uuid, e]))
   const uses = new Map<string, number>()
 
   for (const match of candidates) {
-    const open = new Set([...match.missing, ...match.notSure])
-    for (const name of open) {
-      const entry = byCanonical.get(name)
-      if (!entry || entry.isStaple || isMarked(states[entry.uuid])) continue
-      uses.set(entry.uuid, (uses.get(entry.uuid) ?? 0) + 1)
+    // `open` is uuids, not names — so an entry the recipe reached through an alias is
+    // still askable, and a line offering a choice offers each of its options.
+    for (const uuid of new Set(match.open)) {
+      const entry = byUuid.get(uuid)
+      if (!entry || entry.isStaple || isMarked(states[uuid])) continue
+      uses.set(uuid, (uses.get(uuid) ?? 0) + 1)
     }
   }
 
   const total = candidates.length
-  const byUuid = new Map(registry.map((e) => [e.uuid, e]))
   return [...uses.entries()]
     .map(([uuid, count]) => ({ entry: byUuid.get(uuid)!, count, split: Math.abs(count / total - 0.5) }))
     .sort(

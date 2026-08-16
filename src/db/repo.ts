@@ -10,7 +10,14 @@
 import { db } from './db'
 import { SETTINGS_KEY, defaultSettings } from './schema'
 import { newId } from '../lib/ids'
-import { canonicalNames, normalize, parseIngredientLine, SEEDED_STAPLES } from '../lib/ingredients'
+import {
+  canonicalNames,
+  choiceNames,
+  normalize,
+  parseIngredientLine,
+  splitAlternatives,
+  SEEDED_STAPLES,
+} from '../lib/ingredients'
 import { PRESET_CATEGORIES, addCategory, removeCategory } from '../lib/categories'
 import { bookCitation } from '../lib/books'
 import { normalizeIsbn } from '../lib/isbn'
@@ -72,8 +79,14 @@ function hydrate(ingredient: Ingredient): Ingredient {
   if (ingredient.quantity !== undefined) merged.quantity = ingredient.quantity
   if (ingredient.unit) merged.unit = ingredient.unit
   if (ingredient.item) {
+    // Her wording of the item wins, and the match keys are re-derived from it — including
+    // the alternatives, so editing "lamb or beef" down to "lamb" really does drop the beef.
+    const [canonical, ...alternatives] = splitAlternatives(ingredient.item)
     merged.item = ingredient.item
-    merged.canonical = normalize(ingredient.item)
+    if (canonical) merged.canonical = canonical
+    else delete merged.canonical
+    if (alternatives.length) merged.alternatives = alternatives
+    else delete merged.alternatives
   }
   if (ingredient.note) merged.note = ingredient.note
   if (ingredient.optional !== undefined) merged.optional = ingredient.optional
@@ -117,6 +130,38 @@ async function resolveIngredientUuid(canonical: string, cache: Map<string, strin
   return entry.uuid
 }
 
+/**
+ * A recipe's ingredients as registry uuids, in both shapes the app needs.
+ *
+ * `ingredientChoices` is grouped by line — one entry per requirement, holding every option
+ * that satisfies it — and is what the pantry match reads. `ingredientIndex` is the flat,
+ * deduped version, because Dexie's multi-entry index and the registry's `seenCount` both
+ * need a flat list. Two shapes, one pass, always written together.
+ */
+async function indexIngredients(
+  groups: IngredientGroup[],
+  cache: Map<string, string>,
+): Promise<{ ingredientIndex: string[]; ingredientChoices: string[][] }> {
+  const ingredientChoices: string[][] = []
+  for (const names of choiceNames(groups)) {
+    const uuids: string[] = []
+    for (const name of names) {
+      const uuid = await resolveIngredientUuid(name, cache)
+      // Two spellings of one thing are one option, not a choice between it and itself.
+      if (!uuids.includes(uuid)) uuids.push(uuid)
+    }
+    if (uuids.length) ingredientChoices.push(uuids)
+  }
+
+  const ingredientIndex: string[] = []
+  for (const name of canonicalNames(groups)) {
+    const uuid = await resolveIngredientUuid(name, cache)
+    if (!ingredientIndex.includes(uuid)) ingredientIndex.push(uuid)
+  }
+
+  return { ingredientIndex, ingredientChoices }
+}
+
 /** Recount from the recipes table rather than incrementing — idempotent by construction. */
 async function refreshSeenCounts(uuids: Iterable<string>): Promise<void> {
   for (const uuid of new Set(uuids)) {
@@ -158,10 +203,7 @@ export async function saveRecipe(draft: RecipeDraft, options: SaveOptions = {}):
     .map((step, index) => ({ n: index + 1, text: step.text.trim() }))
 
   const cache = new Map<string, string>()
-  const ingredientIndex: string[] = []
-  for (const name of canonicalNames(ingredients)) {
-    ingredientIndex.push(await resolveIngredientUuid(name, cache))
-  }
+  const { ingredientIndex, ingredientChoices } = await indexIngredients(ingredients, cache)
 
   const existing = await db.recipes.get(uuid)
   const recipe: Recipe = {
@@ -179,6 +221,7 @@ export async function saveRecipe(draft: RecipeDraft, options: SaveOptions = {}):
     tags: draft.tags ?? existing?.tags ?? [],
     photos: [...(existing?.photos ?? []), ...(draft.photos ?? [])],
     ingredientIndex,
+    ingredientChoices,
     ...(draft.parse ?? existing?.parse ? { parse: draft.parse ?? existing?.parse } : {}),
     verified: options.verified ?? true,
   }
@@ -310,8 +353,17 @@ export async function mergeIngredients(
       const next = uuid === fromUuid ? intoUuid : uuid
       if (!ingredientIndex.includes(next)) ingredientIndex.push(next)
     }
+    // The per-line choices move with the flat index, or "lamb or beef" would keep asking
+    // about an entry that no longer exists and the recipe would drop out of the match.
+    const ingredientChoices = recipe.ingredientChoices?.map((uuids) => [
+      ...new Set(uuids.map((uuid) => (uuid === fromUuid ? intoUuid : uuid))),
+    ])
     // Only the index moves; her ingredients, notes and everything else are spread through.
-    await db.recipes.put({ ...recipe, ingredientIndex })
+    await db.recipes.put({
+      ...recipe,
+      ingredientIndex,
+      ...(ingredientChoices ? { ingredientChoices } : {}),
+    })
   }
 
   await db.ingredients.put({
@@ -350,16 +402,24 @@ export type BackfillReport = {
   ingredientsRecovered: number
 }
 
-/** Only `canonical` moves. Her explicit `item` still wins, exactly as it does on save. */
+/**
+ * Only the match keys move — `canonical` and `alternatives`. Her explicit `item` still
+ * wins, exactly as it does on save.
+ */
 function recanonicalise(ingredient: Ingredient): Ingredient {
   const item = ingredient.item ?? parseIngredientLine(ingredient.raw).item
-  const canonical = item ? normalize(item) : ''
-  if (!canonical) {
-    if (ingredient.canonical === undefined) return ingredient
-    const { canonical: _dropped, ...rest } = ingredient
-    return rest
-  }
-  return ingredient.canonical === canonical ? ingredient : { ...ingredient, canonical }
+  const [canonical, ...alternatives] = item ? splitAlternatives(item) : []
+
+  const next: Ingredient = { ...ingredient }
+  if (canonical) next.canonical = canonical
+  else delete next.canonical
+  if (alternatives.length) next.alternatives = alternatives
+  else delete next.alternatives
+
+  const same =
+    next.canonical === ingredient.canonical &&
+    (next.alternatives ?? []).join('|') === (ingredient.alternatives ?? []).join('|')
+  return same ? ingredient : next
 }
 
 export async function backfillCanonicals(): Promise<BackfillReport> {
@@ -382,10 +442,7 @@ export async function backfillCanonicals(): Promise<BackfillReport> {
       })
     })
 
-    const ingredientIndex: string[] = []
-    for (const name of canonicalNames(groups)) {
-      ingredientIndex.push(await resolveIngredientUuid(name, cache))
-    }
+    const { ingredientIndex, ingredientChoices } = await indexIngredients(groups, cache)
 
     const sameItems = groups.every((group, g) =>
       group.items.every((item, i) => item === recipe.ingredients[g].items[i]),
@@ -393,10 +450,13 @@ export async function backfillCanonicals(): Promise<BackfillReport> {
     const sameIndex =
       ingredientIndex.length === recipe.ingredientIndex.length &&
       ingredientIndex.every((uuid, i) => uuid === recipe.ingredientIndex[i])
-    if (sameItems && sameIndex) continue
+    const sameChoices =
+      recipe.ingredientChoices !== undefined &&
+      JSON.stringify(recipe.ingredientChoices) === JSON.stringify(ingredientChoices)
+    if (sameItems && sameIndex && sameChoices) continue
 
-    // Spread the stored recipe so nothing outside these two derived fields can drift.
-    await db.recipes.put({ ...recipe, ingredients: groups, ingredientIndex })
+    // Spread the stored recipe so nothing outside these derived fields can drift.
+    await db.recipes.put({ ...recipe, ingredients: groups, ingredientIndex, ingredientChoices })
     touched.push(...recipe.ingredientIndex, ...ingredientIndex)
     recipesChanged += 1
   }

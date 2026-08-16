@@ -12,7 +12,7 @@ import { listIngredients, listRecipes } from '../db/repo'
 import { emojiFor } from '../lib/emoji'
 import { fold } from '../lib/ingredients'
 import { matchPantry, nextQuestions, shortlist } from '../lib/pantry'
-import type { IngredientState, Match } from '../lib/pantry'
+import type { Choice, IngredientState, Match } from '../lib/pantry'
 import type { IngredientEntry } from '../lib/types'
 import { prefersReducedMotion } from '../platform/motion'
 import { readSession, writeSession } from '../platform/prefs'
@@ -117,7 +117,6 @@ export default function Dinner() {
   const ruledOut = shown.length - ready.length - oneAway.length
 
   const byUuid = useMemo(() => new Map((registry ?? []).map((e) => [e.uuid, e])), [registry])
-  const byCanonical = useMemo(() => new Map((registry ?? []).map((e) => [e.canonical, e])), [registry])
 
   /*
    * The grid. Searching escapes the tabs entirely: it shows every ingredient by that name
@@ -168,9 +167,13 @@ export default function Dinner() {
     navigate(`/recipe/${uuid}`, { state: { from: '/dinner' } })
   }
 
-  function addToHave(name: string) {
-    const entry = byCanonical.get(name)
-    if (entry) setMark(entry.uuid, 'have')
+  /**
+   * The `+` on a missing chip. A line offering a choice — "lamb or beef" — marks its FIRST
+   * option: "I'll pick one up" means one of them, and the printed order is the page's own.
+   * Any of the others is still one tap away in the grid.
+   */
+  function addToHave(choice: Choice) {
+    setMark(choice.uuids[0], 'have')
   }
 
   return (
@@ -289,7 +292,7 @@ function Group({
   label: string
   matches: Match[]
   onOpen: (uuid: string) => void
-  onAdd: (name: string) => void
+  onAdd: (choice: Choice) => void
   accent?: boolean
 }) {
   return (
@@ -320,7 +323,7 @@ function ResultCard({
 }: {
   match: Match
   onOpen: (uuid: string) => void
-  onAdd: (name: string) => void
+  onAdd: (choice: Choice) => void
 }) {
   // `notSure` still ranks this card; it is deliberately not printed. See the file header.
   const { recipe, missing } = match
@@ -340,15 +343,15 @@ function ResultCard({
         <div className="flex flex-col gap-1 px-[15px] pb-3">
           <div className="flex flex-wrap items-center gap-[6px]">
               <span className="font-mono text-xs font-semibold text-copper">missing:</span>
-              {missing.map((name) => (
+              {missing.map((choice) => (
                 <button
-                  key={name}
+                  key={choice.label}
                   type="button"
-                  onClick={() => onAdd(name)}
-                  aria-label={`add ${name} to what you have`}
+                  onClick={() => onAdd(choice)}
+                  aria-label={`add ${choice.primary} to what you have`}
                   className="inline-flex min-h-[44px] items-center gap-[6px] rounded-full bg-copper/10 pl-[11px] pr-[10px] font-mono text-xs font-semibold text-copper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
                 >
-                  {name}
+                  {choice.label}
                   <span aria-hidden="true" className="text-[15px] leading-none opacity-75">
                     +
                   </span>

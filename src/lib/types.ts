@@ -31,6 +31,15 @@ export type Ingredient = {
   item?: string
   /** The matchable key: "flour". Derived — always reconstructible from `raw`. */
   canonical?: string
+  /**
+   * The OTHER things this line will accept. "minced or ground lamb or beef" stores
+   * `canonical: "lamb"` and `alternatives: ["beef"]`, and the line is satisfied by either.
+   *
+   * A choice is one requirement with several answers, not several requirements — which is
+   * why it is a list on the line rather than extra lines. Derived from `raw` like
+   * `canonical`, so improving the splitter is a backfill, never a re-parse.
+   */
+  alternatives?: string[]
   note?: string
   /** Garnishes must not block pantry feasibility. */
   optional?: boolean
@@ -93,6 +102,18 @@ export type Recipe = {
    * optionals are filtered at QUERY time, so flipping isStaple never needs a reindex.
    */
   ingredientIndex: Uuid[]
+
+  /**
+   * The same registry uuids, grouped by LINE: each inner array is one requirement and any
+   * one of its entries satisfies it ("lamb or beef"). This is what the pantry match reads;
+   * `ingredientIndex` above stays the flat, deduped version because Dexie's multi-entry
+   * index and the registry's `seenCount` both need a flat list.
+   *
+   * Optional, and read through `choicesOf()` with a one-per-uuid fallback, so every recipe
+   * saved before this existed still matches exactly as it did (D4 — additive only). The
+   * "Re-check matching" button in Settings fills it in for good.
+   */
+  ingredientChoices?: Uuid[][]
 
   parse?: {
     model: string
@@ -172,6 +193,8 @@ export type ParsedRecipe = {
       unit: string | null
       item: string | null
       canonical: string | null
+      /** Other names this line accepts, when it offers a choice. Empty when it doesn't. */
+      alternatives: string[]
       note: string | null
       optional: boolean
     }[]

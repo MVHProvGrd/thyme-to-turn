@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   canonicalNames,
+  choiceNames,
+  splitAlternatives,
   coversByPrefix,
   fold,
   formatUnit,
@@ -234,5 +236,95 @@ describe('parseIngredientLine: which comma-piece is the ingredient', () => {
     const parsed = parseIngredientLine('500 g boneless, skinless chicken thighs, cut into chunks')
     expect(parsed.canonical).toBe('chicken thigh')
     expect(parsed.note).toBe('boneless, cut into chunks')
+  })
+})
+
+/**
+ * "minced or ground lamb or beef" is one requirement with two answers.
+ *
+ * Before this existed the line canonicalised to "lamb beef" and matched nothing at all —
+ * the invisible failure: she would never see the recipe and never know why.
+ */
+describe('splitAlternatives', () => {
+  it('reads the case that started this: two preparations, two animals, one choice', () => {
+    // minced and ground are the same thing said on two continents, and both are already
+    // preparation words — so what is left is the choice that actually matters.
+    expect(splitAlternatives('minced or ground lamb or beef')).toEqual(['lamb', 'beef'])
+  })
+
+  it('reads a plain substitution', () => {
+    expect(splitAlternatives('butter or margarine')).toEqual(['butter', 'margarine'])
+    expect(splitAlternatives('either milk or cream')).toEqual(['milk', 'cream'])
+  })
+
+  it('treats a slash as the same offer with different punctuation', () => {
+    expect(splitAlternatives('milk/cream')).toEqual(['milk', 'cream'])
+  })
+
+  it('leaves an ordinary line as a single name', () => {
+    expect(splitAlternatives('all-purpose flour')).toEqual(['all-purpose flour'])
+    expect(splitAlternatives('oregano')).toEqual(['oregano'])
+  })
+
+  it('does not split a word that merely contains "or"', () => {
+    expect(splitAlternatives('orange zest')).toEqual(['orange zest'])
+    expect(splitAlternatives('cornstarch')).toEqual(['cornstarch'])
+  })
+
+  it('drops a choice of preparation, which is not a choice of ingredient', () => {
+    expect(splitAlternatives('chopped or sliced onions')).toEqual(['onion'])
+  })
+
+  it('never returns the same name twice', () => {
+    expect(splitAlternatives('beef or ground beef')).toEqual(['beef'])
+  })
+})
+
+describe('parseIngredientLine: lines that offer a choice', () => {
+  it('puts the first option in canonical and the rest in alternatives', () => {
+    const line = parseIngredientLine('500 g minced or ground lamb or beef')
+    expect(line.raw).toBe('500 g minced or ground lamb or beef')
+    expect(line.quantity).toBe(500)
+    expect(line.unit).toBe('g')
+    expect(line.canonical).toBe('lamb')
+    expect(line.alternatives).toEqual(['beef'])
+  })
+
+  it('picks up an alternative that the page put after the comma', () => {
+    const line = parseIngredientLine('1 cup flour, or cornstarch')
+    expect(line.canonical).toBe('flour')
+    expect(line.alternatives).toEqual(['cornstarch'])
+    // The note keeps the printed wording either way.
+    expect(line.note).toBe('or cornstarch')
+  })
+
+  it('leaves alternatives off an ordinary line rather than storing an empty list', () => {
+    expect(parseIngredientLine('2 cups flour').alternatives).toBeUndefined()
+  })
+})
+
+describe('choiceNames', () => {
+  it('gives one entry per line, carrying every name that satisfies it', () => {
+    const groups = [
+      {
+        items: [
+          parseIngredientLine('1 onion'),
+          parseIngredientLine('500 g minced or ground lamb or beef'),
+        ],
+      },
+    ]
+    expect(choiceNames(groups)).toEqual([['onion'], ['lamb', 'beef']])
+    // The flat list still holds every name, because that is what the registry indexes.
+    expect(canonicalNames(groups)).toEqual(['onion', 'lamb', 'beef'])
+  })
+
+  it('collapses two lines asking for the same thing', () => {
+    const groups = [{ items: [parseIngredientLine('1 onion'), parseIngredientLine('2 onions')] }]
+    expect(choiceNames(groups)).toEqual([['onion']])
+  })
+
+  it('derives from raw for rows written before alternatives existed', () => {
+    const groups = [{ items: [{ raw: '500 g minced or ground lamb or beef' }] }]
+    expect(choiceNames(groups)).toEqual([['lamb', 'beef']])
   })
 })

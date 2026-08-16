@@ -68,11 +68,29 @@ function readSteps(value: unknown): string[] {
     .filter(Boolean)
 }
 
+function readAlternatives(value: unknown): string[] {
+  if (typeof value === 'string') {
+    const one = value.trim()
+    return one ? [one] : []
+  }
+  if (!Array.isArray(value)) return []
+  return value.map((entry) => asString(entry) ?? '').filter(Boolean)
+}
+
 function readItem(value: unknown): ParsedRecipe['ingredients'][number]['items'][number] | null {
   if (typeof value === 'string') {
     const raw = value.trim()
     return raw
-      ? { raw, quantity: null, unit: null, item: null, canonical: null, note: null, optional: false }
+      ? {
+          raw,
+          quantity: null,
+          unit: null,
+          item: null,
+          canonical: null,
+          alternatives: [],
+          note: null,
+          optional: false,
+        }
       : null
   }
   if (!value || typeof value !== 'object') return null
@@ -85,6 +103,9 @@ function readItem(value: unknown): ParsedRecipe['ingredients'][number]['items'][
     unit: asString(record.unit ?? record.units),
     item: asString(record.item ?? record.name ?? record.ingredient),
     canonical: asString(record.canonical),
+    // An assistant with no structured-output mode may skip it, spell it "alternates", or
+    // hand back one string instead of a list. All three mean the same thing.
+    alternatives: readAlternatives(record.alternatives ?? record.alternates ?? record.substitutes),
     note: asString(record.note ?? record.notes),
     optional: record.optional === true,
   }

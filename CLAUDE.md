@@ -416,7 +416,7 @@ The point of the app. Two ways in, one engine:
 - **A recipe with unresolved ingredient IDs is excluded from "ready to cook"** — never
   assumed feasible. Silence beats a confident wrong answer. (`matchPantry` drops it from
   the results entirely; it still counts in the "N recipes" tally.)
-- **The recipe detail reads the same marks** (`stateFor` in `pantry.ts`): a row she ruled
+- **The recipe detail reads the same marks** (`stateForNames` in `pantry.ts`): a row she ruled
   out says `missing` in copper, a row she confirmed gets a leaf `✓`. Same engine, same
   alias/prefix resolution — never a second opinion. Detail reads the session marks once
   on open and never writes them.
@@ -431,6 +431,22 @@ The point of the app. Two ways in, one engine:
   the prefix convention only: pantry `chicken` matches `chicken thigh` via
   `startsWith("chicken ")` — mind the space, `chick` must not match. No categories, no
   parent/child fields, no tree.
+- **A line that says "or" is ONE requirement with SEVERAL answers.** "minced or ground lamb
+  or beef" stores `canonical: "lamb"` plus `alternatives: ["beef"]`, and the recipe needs
+  either. It is only `missing` once she has ruled out **every** option — saying "no beef"
+  must never hide a recipe that would take the lamb. `lib/ingredients.ts` `splitAlternatives()`
+  does the splitting; `Recipe.ingredientChoices` (uuids grouped by line) is what
+  `matchPantry` reads, with `ingredientIndex` staying flat for Dexie and `seenCount`.
+  - `minced` and `ground` are the same thing said either side of the Atlantic. Both are
+    preparation words, so both normalize away and the choice that survives is the one that
+    matters. A choice of *preparation* is not a choice of *ingredient*.
+  - **The splitter does not complete a shared head noun.** "vegetable or chicken stock"
+    gives `["vegetable", "chicken stock"]`, not `["vegetable stock", "chicken stock"]` —
+    the rule that would fix it turns "butter or olive oil" into "butter oil". A loose
+    alternative sits unused; a wrong one puts a recipe she can't cook at the top. The AI
+    is asked to write each option out in full because it can see the page.
+  - A **staple among the options satisfies the line outright** — "butter or margarine" is
+    never a question when butter is a staple.
 - Matching is a **pure function over arrays**, tested before the screen exists.
 
 ## Known gotchas
