@@ -438,7 +438,7 @@ export default function Settings() {
               : mergeFrom
                 ? `Now tap the one to KEEP. "${
                     (ingredients ?? []).find((row) => row.uuid === mergeFrom)?.canonical ?? ''
-                  }" will fold into it.`
+                  }" will fold into it — or tap it again to cancel.`
                 : 'Nothing picked yet.'}
           </p>
 
@@ -465,6 +465,11 @@ export default function Settings() {
                     onClick={() => {
                       if (mergeMode === 'inspect') {
                         setOpenEntry(open ? null : entry.uuid)
+                      } else if (entry.uuid === mergeFrom) {
+                        // Tapping the picked one again puts it back. The tap that undoes a
+                        // selection should be the same tap that made it — anything else and
+                        // the only way out is a Cancel button somewhere below the fold.
+                        setMergeFrom(null)
                       } else if (mergeFrom) {
                         void doMerge(entry.uuid)
                       } else {
@@ -473,9 +478,11 @@ export default function Settings() {
                     }}
                     aria-expanded={mergeMode === 'inspect' ? open : undefined}
                     aria-label={
-                      entry.aliases.length
-                        ? `${entry.canonical}, ${entry.aliases.length} folded in`
-                        : `${entry.canonical}, nothing folded in`
+                      entry.uuid === mergeFrom
+                        ? `${entry.canonical}, picked to fold away. Tap again to cancel.`
+                        : entry.aliases.length
+                          ? `${entry.canonical}, ${entry.aliases.length} folded in`
+                          : `${entry.canonical}, nothing folded in`
                     }
                     className={`flex min-h-[44px] w-full items-center justify-between gap-3 px-1 text-left font-mono text-[13px] ${
                       entry.uuid === mergeFrom ? 'text-copper' : 'text-ink'
