@@ -52,6 +52,7 @@ src/db/         schema.ts, db.ts, repo.ts (the ONLY writer), backup.ts
 src/api/        claude.ts, openlibrary.ts, key.ts — the only files that make network calls
 src/screens/    one file per screen, UI only
 src/components/ shared presentational pieces; no db/api/platform imports
+src/seed/       the starter recipes (data + a lazy loader); imports only lib/ types
 ```
 
 - Screens never touch Dexie directly — go through `db/repo.ts`.
@@ -73,6 +74,8 @@ platform/   clock.ts · prefs.ts (localStorage prefs + sessionStorage marks) · 
 db/         schema.ts (v1) · db.ts · repo.ts · backup.ts
 screens/    Dinner (landing) · RecipeList · RecipeDetail (cook mode) · RecipeEdit · Settings
 components/ Screen · TabBar · Button · Field · Toast · SourceLine · EmptyState · Tile · useFlip
+seed/       starter.json (100 recipes) · index.ts (loader) · README.md (source, licence)
+scripts/    fetch-starter.mjs — regenerates seed/starter.json from the Wikibooks Cookbook
 ```
 
 `/dinner` is the landing route and the first of three tabs. The design for it is in
@@ -90,6 +93,22 @@ Conventions worth keeping:
   display reads like a person wrote it.
 - **Import is upsert-by-uuid.** The test that matters is that importing the *same* file
   twice changes nothing: `src/db/__tests__/roundtrip.test.ts`.
+- **Starter recipes go through `saveRecipe`, never through import.** `importBackup`
+  bulk-puts registry rows by uuid, so a seed shipped as a backup would bring a second
+  `garlic` beside hers. `repo.addStarterRecipes` saves each draft (fixed uuid, `verified:
+  false`) so ingredients reconcile against HER registry, and skips any uuid already on the
+  device — pressing the button twice adds nothing and never overwrites one she edited.
+  `removeStarterRecipes` deletes only rows with `source.license` set AND `verified: false`;
+  an edited starter is hers now (`src/db/__tests__/starter.test.ts`).
+- **`source.license` marks anything that isn't from her shelf** (`"CC BY-SA 4.0"` on the
+  starter set; `"public-domain"` for a future Gutenberg import). Absent on her own recipes.
+  Additive optional field, no Dexie change.
+- **`SEEDED_STAPLES` includes the common spellings** — `kosher salt`, `extra-virgin olive
+  oil`, `freshly-ground black pepper`, `all-purpose flour` — because with 100 real recipes
+  those otherwise turn up as question tiles. Applied when an entry is first minted; hers
+  to flip afterwards.
+- **`normalize` strips instruction tails** (`to taste`, `as needed`, `if desired`, `for
+  serving`…) with word boundaries, so "Salt to taste" is `salt`, not `salt taste`.
 
 ## Commands
 
@@ -100,6 +119,7 @@ npm run typecheck  # tsc -b  (NOT `tsc --noEmit` — see gotchas)
 npm test           # vitest run
 npm run preview    # already pinned to --port 4173 --host 127.0.0.1
 node shot.mjs      # drives the real app in Chromium, writes shots/*.png (needs preview up)
+node scripts/fetch-starter.mjs   # regenerate src/seed/starter.json (network; uuids kept)
 ```
 
 `vite preview` must bind IPv4 or it fails with `EAFNOSUPPORT :::4173` in this sandbox.
@@ -116,7 +136,11 @@ screenshot back with the Read tool — don't declare a UI change done from the d
 390×844, then shoots the list, edit, detail, cook mode, settings, a post-reload check, and
 the dinner screen — cold start, three things tapped out, the card with both `missing` and
 `not sure`, the detail rows saying `missing` / `✓`, the `+` flip, everything ruled out,
-"only what I listed", and staples in Settings. Extend it when a screen lands. Output goes to `shots/`, which is gitignored.
+"only what I listed", staples in Settings — then loads the 100 starter recipes and shoots
+the dinner screen with 104 (the question grid with real data) and a starter recipe's page.
+
+Playwright's `getByRole(name)` is a substring match: with 22 chicken-ish tiles,
+`{ name: 'chicken, not marked' }` needs `exact: true`. Extend it when a screen lands. Output goes to `shots/`, which is gitignored.
 
 On a laptop without the sandbox Chromium, `shot.mjs` falls back to the installed Google
 Chrome (`channel: 'chrome'`). Still never `playwright install`.

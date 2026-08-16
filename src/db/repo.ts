@@ -119,12 +119,21 @@ async function refreshSeenCounts(uuids: Iterable<string>): Promise<void> {
   }
 }
 
+export type SaveOptions = {
+  /**
+   * `true` (default) means she pressed Save on this screen. Bulk-loaded recipes — the
+   * starter set, a future Gutenberg import — pass `false`: nobody has looked at them yet.
+   * Her first Save on one flips it to `true`. There is no third state.
+   */
+  verified?: boolean
+}
+
 /**
  * Upsert a recipe. Its uuid is minted once, at creation, and never changes again — not on
  * an edit, not on a re-parse, not on a re-import (D3). That single rule is what makes
  * import an upsert instead of an append.
  */
-export async function saveRecipe(draft: RecipeDraft): Promise<Recipe> {
+export async function saveRecipe(draft: RecipeDraft, options: SaveOptions = {}): Promise<Recipe> {
   const timestamp = now()
   const uuid = draft.uuid ?? newId()
 
@@ -162,13 +171,53 @@ export async function saveRecipe(draft: RecipeDraft): Promise<Recipe> {
     photos: existing?.photos ?? [],
     ingredientIndex,
     ...(existing?.parse ? { parse: existing.parse } : {}),
-    // She pressed Save, so a human looked at it. There is no third state.
-    verified: true,
+    verified: options.verified ?? true,
   }
 
   await db.recipes.put(recipe)
   await refreshSeenCounts([...(existing?.ingredientIndex ?? []), ...ingredientIndex])
   return recipe
+}
+
+/**
+ * Load the starter recipes (src/seed). Skips any uuid already on the device — pressing the
+ * button twice adds nothing, and a starter recipe she has since edited is never overwritten
+ * (rule 6). Each one goes through saveRecipe so its ingredients reconcile against HER
+ * registry (exact → alias → create) instead of bringing a second "garlic" along, and
+ * lands as verified: false — she hasn't looked at it yet.
+ */
+export async function addStarterRecipes(
+  drafts: (RecipeDraft & { uuid: string })[],
+): Promise<{ added: number; skipped: number }> {
+  let added = 0
+  let skipped = 0
+  for (const draft of drafts) {
+    if (await db.recipes.get(draft.uuid)) {
+      skipped += 1
+      continue
+    }
+    await saveRecipe(draft, { verified: false })
+    added += 1
+  }
+  return { added, skipped }
+}
+
+/**
+ * The off switch for the starter set: removes recipes that carry a source license AND
+ * that she has never saved (`verified: false`). One she edited is hers now and stays.
+ * Never touches anything without a license — her own recipes have none.
+ */
+export async function removeStarterRecipes(): Promise<number> {
+  const rows = await db.recipes.toArray()
+  const starters = rows.filter((r) => r.source.license && !r.verified)
+  for (const recipe of starters) await deleteRecipe(recipe.uuid)
+  return starters.length
+}
+
+/** How many recipes on the device are unedited starters — for the Settings summary. */
+export async function countStarterRecipes(): Promise<number> {
+  const rows = await db.recipes.toArray()
+  return rows.filter((r) => r.source.license && !r.verified).length
 }
 
 export async function deleteRecipe(uuid: string): Promise<void> {

@@ -42,6 +42,11 @@ const FORBIDDEN: Record<string, { pattern: RegExp; why: string }[]> = {
   components: [
     { pattern: /(^|\/)(db|api|platform)\//, why: 'components/ are presentational — no data access' },
   ],
+  seed: [
+    { pattern: /^react($|\/|-dom)/, why: 'seed/ is data plus a loader — no React' },
+    { pattern: /^dexie/, why: 'seed/ never writes — repo.ts is the only writer' },
+    { pattern: /(^|\/)(db|api|platform|screens|components)\//, why: 'seed/ imports only lib/ types' },
+  ],
 }
 
 function sourceFiles(dir: string): string[] {

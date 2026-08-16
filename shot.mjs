@@ -129,7 +129,7 @@ const filter = () => page.getByLabel('Filter ingredients')
 /** Find a tile by name (typing narrows the grid to it), tap it once: unknown → ruled out. */
 async function ruleOut(name) {
   await filter().fill(name)
-  await page.getByRole('button', { name: `${name}, not marked` }).click()
+  await page.getByRole('button', { name: `${name}, not marked`, exact: true }).click()
   await filter().fill('')
   await page.waitForTimeout(250) // let the re-rank slide finish
 }
@@ -202,6 +202,31 @@ await page.getByLabel('only what I listed').uncheck()
 await page.goto(`${BASE}#/settings`)
 await page.getByRole('button', { name: 'salt, a staple' }).waitFor()
 await page.screenshot({ path: `${OUT}/14-settings-staples.png` })
+
+// The starter set: 100 recipes from Settings, then the dinner screen with something real
+// to rank — this is where the question grid earns its keep.
+await page.getByRole('button', { name: /Add 100 starter recipes/ }).click()
+await page.waitForSelector('text=100 on this phone now', { timeout: 60000 })
+await page.waitForTimeout(2400)
+await page.screenshot({ path: `${OUT}/15-settings-starter.png` })
+
+await page.goto(`${BASE}#/dinner`)
+await page.getByRole('button', { name: 'Reset' }).first().click()
+await page.waitForSelector('text=104 recipes')
+await page.waitForTimeout(400) // 104 cards sliding into place
+await page.screenshot({ path: `${OUT}/16-dinner-104-cold.png` })
+await ruleOut('chicken')
+await ruleOut('garlic')
+await ruleOut('egg')
+await ruleOut('tomato')
+await page.waitForTimeout(250)
+await page.screenshot({ path: `${OUT}/17-dinner-104-four-out.png` })
+
+// A starter recipe cites its source on the card and on the page.
+await page.goto(`${BASE}#/recipes`)
+await page.getByText('Spaghetti alla Carbonara').click()
+await page.waitForSelector('text=Wikibooks Cookbook')
+await page.screenshot({ path: `${OUT}/18-starter-detail.png` })
 
 console.log('shots written')
 await browser.close()

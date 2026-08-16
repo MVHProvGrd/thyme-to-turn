@@ -8,6 +8,8 @@ The screen it exists for: **mark what you're out of, and find out what's for din
 - Everything stays on the device. No accounts, nothing published, no backend to run.
 - Works in airplane mode. Installs to a phone home screen.
 - Every recipe cites its book and page — an index into a shelf, not a replacement for it.
+- Ships with 100 optional starter recipes (Wikibooks Cookbook, CC BY-SA 4.0 — see
+  `src/seed/README.md`) so the dinner screen has something to rank on day one.
 
 ## Running it
 

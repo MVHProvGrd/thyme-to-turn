@@ -5,8 +5,18 @@ import Button from '../components/Button'
 import Tile from '../components/Tile'
 import { useToast } from '../components/Toast'
 import { exportBackup, importBackup } from '../db/backup'
-import { countRecipes, listIngredients, setStaple, updateSettings, wipeEverything } from '../db/repo'
+import {
+  addStarterRecipes,
+  countRecipes,
+  countStarterRecipes,
+  listIngredients,
+  removeStarterRecipes,
+  setStaple,
+  updateSettings,
+  wipeEverything,
+} from '../db/repo'
 import { emojiFor } from '../lib/emoji'
+import { STARTER_COUNT, loadStarterRecipes } from '../seed'
 import { downloadText, formatBytes } from '../platform/files'
 import { now } from '../platform/clock'
 import { BackupError } from '../lib/backup-format'
@@ -26,7 +36,26 @@ export default function Settings() {
   const [usage, setUsage] = useState<string | null>(null)
 
   const recipeCount = useLiveQuery(countRecipes, [], undefined)
+  const starterCount = useLiveQuery(countStarterRecipes, [], undefined)
   const ingredients = useLiveQuery(listIngredients, [], undefined)
+  const [busy, setBusy] = useState(false)
+
+  async function doAddStarters() {
+    setBusy(true)
+    try {
+      const { added, skipped } = await addStarterRecipes(await loadStarterRecipes())
+      toast(added ? `Added ${added} starter ${added === 1 ? 'recipe' : 'recipes'}.` : 'Already here.')
+      if (added && skipped) setReport([`${added} new, ${skipped} already present.`])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function doRemoveStarters() {
+    if (!confirm('Remove the starter recipes? Any you have edited stay.')) return
+    const removed = await removeStarterRecipes()
+    toast(removed ? `Removed ${removed}.` : 'Nothing to remove.')
+  }
 
   async function doExport() {
     const { filename, text } = await exportBackup()
@@ -94,6 +123,24 @@ export default function Settings() {
               Ingredients show up here as you add recipes.
             </p>
           )}
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">Starter recipes</h2>
+          <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+            {STARTER_COUNT} everyday recipes from the Wikibooks Cookbook (CC BY-SA), so the dinner
+            screen has something to chew on before your own books are in. Each one says where it
+            came from. Edit one and it becomes yours; the rest can be removed any time.
+            {starterCount ? ` ${starterCount} on this phone now.` : ''}
+          </p>
+          <Button variant="secondary" disabled={busy} onClick={() => void doAddStarters()}>
+            {busy ? 'Adding…' : `Add ${STARTER_COUNT} starter recipes`}
+          </Button>
+          {starterCount ? (
+            <Button variant="destructive" onClick={() => void doRemoveStarters()}>
+              Remove starter recipes
+            </Button>
+          ) : null}
         </section>
 
         <section className="flex flex-col gap-3">

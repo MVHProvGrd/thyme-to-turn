@@ -53,6 +53,13 @@ export type RecipeSource = {
   /** Free text until phase 3 gives it a real book to point at. */
   citation?: string
   url?: string
+  /**
+   * Set only on recipes that did not come from her own shelf — the starter set
+   * ("CC BY-SA 4.0"), a public-domain cookbook ("public-domain"). Absent on hers. If
+   * shared material is ever the thing she wants to share, the field that says so already
+   * exists (05-SOURCES-AND-RIGHTS.md).
+   */
+  license?: string
 }
 
 export type Recipe = {
