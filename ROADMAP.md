@@ -5,6 +5,20 @@ Ideas land here, not in the current branch. Newest at top.
 The habit is the point: every project in this workbench that stayed shippable kept one of
 these, and the one that didn't turned into a six-month project that didn't work yet.
 
+## Removed after real use — recoverable
+
+Alisa used the dinner screen and asked for both of these to go (2026-08-16). Written down
+because "we tried it and she didn't want it" is worth more than the code was.
+
+- **The `not sure: …` line on the result card.** Gone from the card; `notSure` still
+  ranks. If it ever comes back it should probably be on the *recipe page* rather than the
+  card — she wants the shortlist clean and the detail available.
+- **The "only what I listed" checkbox** (and `matchPantry`'s `onlyWhatIListed` option).
+  It collapsed `notSure` into `missing` for a bare-cupboard night. To restore: add the
+  option back to `matchPantry` (one branch: `missing: [...missing, ...notSure]`), and note
+  that under it every recipe must stay a live candidate for `nextQuestions`, or the grid
+  goes dead at cold start. Git history has the working version.
+
 ## Came up while loading the starter recipes
 
 - **Quantities by weight, and portion changes.** Owner raised 2026-08-16. Two things

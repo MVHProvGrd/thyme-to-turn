@@ -25,9 +25,11 @@ import { readSession, writeSession } from '../platform/prefs'
  * she stops when the answer is good enough.
  *
  * Two filters, both live at once. Every tile is `unknown` / `dontHave` / `have`, and
- * `unknown` means unknown. Each card carries two counts and never one: `missing` (she
- * ruled it out) and `not sure` (she never mentioned it). Those two words are never given
- * synonyms anywhere in the product.
+ * `unknown` means unknown. Both counts still exist and still rank the results — but only
+ * `missing` is printed. Alisa asked for the `not sure` line to come off the card
+ * (2026-08-16): standing at the fridge she reads what she is out of, and a list of things
+ * she never mentioned was noise. The distinction is now carried by the group she is in,
+ * not by a label.
  *
  * The marks are session state only. "I have no chicken" and "not chicken tonight" are
  * indistinguishable, so they are never written into a standing pantry.
@@ -44,7 +46,6 @@ export default function Dinner() {
   const registry = useLiveQuery(listIngredients, [], undefined)
 
   const [marks, setMarks] = useState<Marks>(() => readSession('marks', {}))
-  const [onlyWhatIListed, setOnlyWhatIListed] = useState(() => readSession('onlyWhatIListed', false))
   const [query, setQuery] = useState('')
 
   function updateMarks(next: Marks) {
@@ -60,19 +61,14 @@ export default function Dinner() {
     updateMarks(next)
   }
 
-  function toggleOnly(value: boolean) {
-    setOnlyWhatIListed(value)
-    writeSession('onlyWhatIListed', value)
-  }
-
   function reset() {
     updateMarks({})
     setQuery('')
   }
 
   const matches = useMemo(
-    () => (recipes && registry ? matchPantry(recipes, marks, registry, { onlyWhatIListed }) : []),
-    [recipes, registry, marks, onlyWhatIListed],
+    () => (recipes && registry ? matchPantry(recipes, marks, registry) : []),
+    [recipes, registry, marks],
   )
 
   const ready = matches.filter((m) => m.missing.length === 0)
@@ -95,13 +91,10 @@ export default function Dinner() {
       const entry = byUuid.get(uuid)
       return entry && !entry.isStaple ? [entry] : []
     })
-    // Live candidates: what she might still cook. Normally the listed recipes (0–1 missing).
-    // Under "only what I listed" every unmentioned thing counts as missing, so at cold start
-    // nothing is listed — but every recipe is one `have` at a time from rescue, so all of
-    // them stay in the pool and the grid asks "what DO you have?"
-    const live = onlyWhatIListed ? matches : matches.filter((m) => m.missing.length <= 1)
+    // Live candidates: what she might still cook — the recipes actually listed below.
+    const live = matches.filter((m) => m.missing.length <= 1)
     return [...answered, ...nextQuestions(live, registry, marks, QUESTIONS)]
-  }, [registry, query, marks, matches, byUuid, onlyWhatIListed])
+  }, [registry, query, marks, matches, byUuid])
 
   const flipRef = useFlip<HTMLDivElement>(!prefersReducedMotion())
 
@@ -170,15 +163,6 @@ export default function Dinner() {
                 <p className="my-[2px] font-mono text-xs text-ink-soft">No ingredient by that name.</p>
               ) : null}
             </div>
-            <label className="mt-1 flex min-h-[44px] cursor-pointer items-center justify-end gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft">
-              <input
-                type="checkbox"
-                checked={onlyWhatIListed}
-                onChange={(event) => toggleOnly(event.target.checked)}
-                className="h-4 w-4 accent-thyme"
-              />
-              only what I listed
-            </label>
           </div>
 
           <div ref={flipRef} className="relative flex flex-col gap-[22px] px-5 pb-6 pt-[6px]">
@@ -191,22 +175,10 @@ export default function Dinner() {
 
             {ready.length === 0 && oneAway.length === 0 ? (
               <div className="mt-[14px] flex flex-col items-start gap-3 rounded-sm border border-rule bg-card px-5 py-7">
-                {onlyWhatIListed && Object.keys(marks).length === 0 ? (
-                  // The strict extreme with nothing listed yet: not a dead end, a prompt.
-                  <>
-                    <p className="font-serif text-[19px] leading-[1.35] text-ink [text-wrap:pretty]">
-                      Nothing yet. Tap what you have — or show everything.
-                    </p>
-                    <Button onClick={() => toggleOnly(false)}>Show everything</Button>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-serif text-[19px] leading-[1.35] text-ink [text-wrap:pretty]">
-                      Nothing matches. Un-tap something, or add a recipe.
-                    </p>
-                    <Button onClick={reset}>Reset</Button>
-                  </>
-                )}
+                <p className="font-serif text-[19px] leading-[1.35] text-ink [text-wrap:pretty]">
+                  Nothing matches. Un-tap something, or add a recipe.
+                </p>
+                <Button onClick={reset}>Reset</Button>
               </div>
             ) : null}
 
@@ -266,7 +238,8 @@ function ResultCard({
   onOpen: (uuid: string) => void
   onAdd: (name: string) => void
 }) {
-  const { recipe, missing, notSure } = match
+  // `notSure` still ranks this card; it is deliberately not printed. See the file header.
+  const { recipe, missing } = match
   return (
     <article data-flip-key={recipe.uuid} className="flex flex-col rounded-sm border border-rule bg-card">
       <button
@@ -279,10 +252,9 @@ function ResultCard({
         </h3>
         <SourceLine citation={recipe.source.citation} page={recipe.source.pageStart} />
       </button>
-      {missing.length > 0 || notSure.length > 0 ? (
+      {missing.length > 0 ? (
         <div className="flex flex-col gap-1 px-[15px] pb-3">
-          {missing.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-[6px]">
+          <div className="flex flex-wrap items-center gap-[6px]">
               <span className="font-mono text-xs font-semibold text-copper">missing:</span>
               {missing.map((name) => (
                 <button
@@ -298,13 +270,7 @@ function ResultCard({
                   </span>
                 </button>
               ))}
-            </div>
-          ) : null}
-          {notSure.length > 0 ? (
-            <p className="font-mono text-[11px] leading-[1.5] text-ink-soft [text-wrap:pretty]">
-              not sure: {notSure.join(', ')}
-            </p>
-          ) : null}
+          </div>
         </div>
       ) : (
         <div className="pb-2" />

@@ -210,14 +210,20 @@ The point of the app. Two ways in, one engine:
   *incomplete* (three typed items ≠ an empty kitchen). Conflating them is the bug that
   makes the screen untrustworthy.
 - **Two counts per recipe, never one:** `missing` (ruled out — hard) and `notSure`
-  (unmentioned — soft). Sort by `missing`, then `notSure`, then coverage, then title. Show
-  them differently on the card: `missing: cream` vs `not sure: shallots, thyme` — those two
-  words never get synonyms anywhere in the product. **A `have` mark must never increase
-  any recipe's `missing` count** — that's the regression test in `pantry.test.ts`.
-- `onlyWhatIListed` is a **checkbox** that collapses `notSure` into `missing`, for the
-  bare-cupboard case. Not a mode. Under it every recipe stays a live candidate for the
-  question grid (each is one `have` at a time from rescue), otherwise the grid would go
-  dead at cold start.
+  (unmentioned — soft). Sort by `missing`, then `notSure`, then coverage, then title.
+  **A `have` mark must never increase any recipe's `missing` count** — that's the
+  regression test in `pantry.test.ts`.
+- **`notSure` ranks, it does not print.** Alisa asked for the `not sure: …` line to come
+  off the result card (2026-08-16): at the fridge she reads what she is *out of*, and a
+  list of things she never mentioned was noise. The card shows `missing:` chips only; the
+  soft count is still computed and still the first tiebreak, so the order is unchanged.
+  Do NOT respond to "the card only shows one number" by collapsing the two counts in
+  `matchPantry` — that is the exact bug this whole file exists to prevent, and it is now
+  *invisible* rather than merely wrong on screen. The honest reading of the group headers
+  is now "nothing ruled out" / "one thing ruled out", not "everything confirmed".
+- **`onlyWhatIListed` is gone** — the bare-cupboard checkbox was removed from both the
+  screen and `matchPantry` (Alisa, 2026-08-16: she didn't want it). The engine takes no
+  options now. `ROADMAP.md` records how it worked if it is ever wanted back.
 - **Tap-out grid is the primary surface.** Recall ("what's in my fridge") is hard and
   incomplete; recognition ("do you have parmesan?") is easy. She's out of three things and
   has forty.

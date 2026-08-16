@@ -147,7 +147,7 @@ await ruleOut('anchovy')
 await page.waitForSelector('text=One thing away')
 await page.screenshot({ path: `${OUT}/09-dinner-three-out.png` })
 
-// The card that carries both labels: missing (hard) and not sure (soft).
+// The card and its missing chips. `not sure` is deliberately not printed (Alisa, Aug 2026).
 const gratin = page.locator('article', { hasText: 'Fennel gratin' })
 await gratin.scrollIntoViewIfNeeded()
 await gratin.screenshot({ path: `${OUT}/10-dinner-card.png` })
@@ -181,22 +181,18 @@ for (const name of ['garlic', 'fennel', 'chicken', 'lentil', 'anchovy', 'cream']
 await page.waitForSelector('text=Nothing matches')
 await page.screenshot({ path: `${OUT}/12-dinner-nothing.png` })
 
-// Only what I listed: the strict extreme, on its own with nothing marked.
+// Two taps say "have" (dontHave comes first) — the confirmed state on the grid.
 await page.getByRole('button', { name: 'Reset' }).first().click()
-await page.getByLabel('only what I listed').check()
-await page.waitForSelector('text=Tap what you have')
-await page.screenshot({ path: `${OUT}/13-dinner-only-listed.png` })
-// Two taps to say "have" (dontHave comes first), and the soup is one thing away.
 await filter().fill('lentil')
-await page.getByRole('button', { name: 'lentil, not marked' }).click()
-await page.getByRole('button', { name: 'lentil, ruled out' }).click()
+await page.getByRole('button', { name: 'lentil, not marked', exact: true }).click()
+await page.getByRole('button', { name: 'lentil, ruled out', exact: true }).click()
 await filter().fill('onion')
-await page.getByRole('button', { name: 'onion, not marked' }).click()
-await page.getByRole('button', { name: 'onion, ruled out' }).click()
+await page.getByRole('button', { name: 'onion, not marked', exact: true }).click()
+await page.getByRole('button', { name: 'onion, ruled out', exact: true }).click()
 await filter().fill('')
-await page.waitForSelector('text=One thing away')
-await page.screenshot({ path: `${OUT}/13-dinner-only-listed-two-have.png` })
-await page.getByLabel('only what I listed').uncheck()
+await page.waitForTimeout(250)
+await page.screenshot({ path: `${OUT}/13-dinner-two-have.png` })
+await page.getByRole('button', { name: 'Reset' }).first().click()
 
 // Staples live in Settings; toggling one changes the ranking, so it must be visible.
 await page.goto(`${BASE}#/settings`)

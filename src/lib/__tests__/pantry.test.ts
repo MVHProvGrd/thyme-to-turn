@@ -170,6 +170,11 @@ describe('matchPantry: how a mark reaches an ingredient', () => {
   })
 })
 
+/**
+ * `notSure` is no longer printed on the card (Alisa, 2026-08-16) but it still ranks, so
+ * these assertions matter as much as they ever did — arguably more, since a wrong
+ * `notSure` is now invisible rather than merely wrong on screen.
+ */
 describe('matchPantry: the two filters, live at once', () => {
   it('cold start: every recipe at missing 0, sorted by fewest notSure', () => {
     const matches = matchPantry(RECIPES, {}, REGISTRY)
@@ -238,25 +243,6 @@ describe('matchPantry: the two filters, live at once', () => {
   })
 })
 
-describe('matchPantry: onlyWhatIListed', () => {
-  it('collapses notSure into missing', () => {
-    const [m] = matchPantry([lentilSoup], states({ lentil: 'have' }), REGISTRY, { onlyWhatIListed: true })
-    expect(m.missing).toEqual(['onion', 'garlic'])
-    expect(m.notSure).toEqual([])
-  })
-
-  it('with nothing marked leaves nothing ready - the strict extreme', () => {
-    const matches = matchPantry(RECIPES, {}, REGISTRY, { onlyWhatIListed: true })
-    expect(matches.every((m) => m.missing.length > 0)).toBe(true)
-    expect(matches.every((m) => m.notSure.length === 0)).toBe(true)
-  })
-
-  it('keeps ruled-out items ahead of unmentioned ones in the collapsed list', () => {
-    const [m] = matchPantry([lentilSoup], states({ garlic: 'dontHave' }), REGISTRY, { onlyWhatIListed: true })
-    expect(m.missing).toEqual(['garlic', 'lentil', 'onion'])
-  })
-})
-
 /* ------------------------------------------------------------ nextQuestions */
 
 describe('nextQuestions: the Twenty Questions move', () => {
@@ -300,11 +286,6 @@ describe('nextQuestions: the Twenty Questions move', () => {
     expect(asked).not.toContain('onion')
     expect(asked).not.toContain('garlic')
     expect(asked.length).toBeGreaterThan(0)
-  })
-
-  it('still asks under onlyWhatIListed, where every unmentioned thing sits in missing', () => {
-    const candidates = matchPantry(RECIPES, {}, REGISTRY, { onlyWhatIListed: true })
-    expect(nextQuestions(candidates, REGISTRY, {}).length).toBeGreaterThan(0)
   })
 
   it('returns nothing when there are no candidates', () => {

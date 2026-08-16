@@ -15,6 +15,11 @@
  * The marks are not symmetric and that asymmetry is the whole design. One number cannot
  * carry both, so every match has two: `missing` and `notSure`. The regression test that
  * matters: a `have` mark must never increase any recipe's `missing` count.
+ *
+ * `notSure` is a RANKING input, not a display one — the dinner screen stopped printing it
+ * on 2026-08-16 at Alisa's request. Keep computing it: it is the tiebreak that puts the
+ * recipe she is closest to at the top, and collapsing the two counts into one is the bug
+ * this whole file exists to prevent.
  */
 
 import type { IngredientEntry, Recipe } from './types'
@@ -29,14 +34,6 @@ export type Match = {
   notSure: string[]
   /** confirmed / required, for tie-breaking. 1 when nothing is required. */
   coverage: number
-}
-
-export type MatchOptions = {
-  /**
-   * The bare-cupboard checkbox: treat every unmentioned ingredient as missing. A checkbox,
-   * not a mode — the same engine, one line different.
-   */
-  onlyWhatIListed?: boolean
 }
 
 /** Tap order on a tile. `dontHave` first: ruling things out is the primary gesture. */
@@ -160,7 +157,6 @@ export function matchPantry(
   recipes: Recipe[],
   states: Record<string, IngredientState>,
   registry: IngredientEntry[],
-  opts: MatchOptions = {},
 ): Match[] {
   const byUuid = new Map(registry.map((e) => [e.uuid, e]))
   const marks = collectMarks(states, registry)
@@ -193,11 +189,7 @@ export function matchPantry(
     const required = confirmed.length + missing.length + notSure.length
     const coverage = required === 0 ? 1 : confirmed.length / required
 
-    if (opts.onlyWhatIListed) {
-      matches.push({ recipe, missing: [...missing, ...notSure], notSure: [], coverage })
-    } else {
-      matches.push({ recipe, missing, notSure, coverage })
-    }
+    matches.push({ recipe, missing, notSure, coverage })
   }
 
   matches.sort(
@@ -231,7 +223,6 @@ export function nextQuestions(
   const uses = new Map<string, number>()
 
   for (const match of candidates) {
-    // Under onlyWhatIListed the unmentioned names sit in `missing`, so look at both.
     const open = new Set([...match.missing, ...match.notSure])
     for (const name of open) {
       const entry = byCanonical.get(name)
