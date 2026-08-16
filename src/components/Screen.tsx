@@ -13,7 +13,7 @@ import TabBar from './TabBar'
  * in. `tabs` is kept as an escape hatch but nothing passes it today.
  *
  * `onLeave` is what makes that safe on the two screens holding work that is not saved yet.
- * Return false and the tap is cancelled. Without it, one stray thumb on "Dinner" would
+ * Return false and the tap is cancelled. Without it, one stray thumb on "Plan a meal" would
  * silently bin a parse she has not checked yet — see RecipeParse and RecipeEdit.
  */
 export default function Screen({

@@ -91,7 +91,7 @@ export default function RecipeEdit() {
   const [dirty, setDirty] = useState(false)
 
   /**
-   * The tab bar is on every screen now, so "Dinner" is one thumb away from a form full of
+   * The tab bar is on every screen now, so "Plan a meal" is one thumb away from a form full of
    * work. A parse is the dangerous case: it lives in navigation state and is gone the
    * moment this screen unmounts, so an unsaved parse always asks, typed or not.
    */
