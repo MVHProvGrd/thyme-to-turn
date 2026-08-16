@@ -12,12 +12,16 @@ import { SETTINGS_KEY, defaultSettings } from './schema'
 import { newId } from '../lib/ids'
 import { canonicalNames, normalize, parseIngredientLine, SEEDED_STAPLES } from '../lib/ingredients'
 import { PRESET_CATEGORIES, addCategory, removeCategory } from '../lib/categories'
+import { bookCitation } from '../lib/books'
+import { normalizeIsbn } from '../lib/isbn'
 import { now } from '../platform/clock'
 import type {
   Book,
   Ingredient,
   IngredientEntry,
   IngredientGroup,
+  PhotoBlob,
+  PhotoRef,
   Recipe,
   RecipeSource,
   Settings,
@@ -162,7 +166,7 @@ export async function saveRecipe(draft: RecipeDraft, options: SaveOptions = {}):
     updatedAt: timestamp,
     title: draft.title.trim() || 'Untitled',
     ...(draft.subtitle?.trim() ? { subtitle: draft.subtitle.trim() } : {}),
-    source: draft.source,
+    source: await withBookCitation(draft.source),
     ...(draft.yield ? { yield: draft.yield } : {}),
     ...(draft.times ? { times: draft.times } : {}),
     ingredients,
@@ -178,6 +182,18 @@ export async function saveRecipe(draft: RecipeDraft, options: SaveOptions = {}):
   await db.recipes.put(recipe)
   await refreshSeenCounts([...(existing?.ingredientIndex ?? []), ...ingredientIndex])
   return recipe
+}
+
+/**
+ * A recipe that points at one of her books also carries the book's citation as text, so
+ * the source line, search and a backup all read right without a join — and survive the
+ * book being deleted. The uuid is the link; the text is the convenience.
+ */
+async function withBookCitation(source: RecipeSource): Promise<RecipeSource> {
+  if (source.kind !== 'book' || !source.bookUuid) return source
+  const book = await db.books.get(source.bookUuid)
+  if (!book) return source
+  return { ...source, citation: bookCitation(book) }
 }
 
 /**
@@ -225,6 +241,7 @@ export async function deleteRecipe(uuid: string): Promise<void> {
   const existing = await db.recipes.get(uuid)
   if (!existing) return
   await db.recipes.delete(uuid)
+  for (const photo of existing.photos) await db.photos.delete(photo.uuid)
   await refreshSeenCounts(existing.ingredientIndex)
 }
 
@@ -244,7 +261,157 @@ export async function setStaple(uuid: string, isStaple: boolean): Promise<void> 
 /* --------------------------------------------------------------------- books */
 
 export async function listBooks(): Promise<Book[]> {
-  return db.books.toArray()
+  const rows = await db.books.toArray()
+  return rows.sort((a, b) => a.title.localeCompare(b.title))
+}
+
+export async function getBook(uuid: string): Promise<Book | undefined> {
+  return db.books.get(uuid)
+}
+
+export async function countBooks(): Promise<number> {
+  return db.books.count()
+}
+
+/**
+ * The duplicate check: before creating a book from a scan, look it up by ISBN. Hit → open
+ * the existing one. This is what stops "I scanned it twice and now have two Zuni Cafés",
+ * and it works only because isbn13 is indexed even though it is not the key.
+ */
+export async function findBookByIsbn(isbn: string): Promise<Book | undefined> {
+  const isbn13 = normalizeIsbn(isbn)
+  if (!isbn13) return undefined
+  return db.books.where('externalRefs.isbn13').equals(isbn13).first()
+}
+
+/** What a screen hands over for a book. Everything else is filled in here. */
+export type BookDraft = {
+  uuid?: string
+  title: string
+  subtitle?: string
+  authors: string[]
+  publisher?: string
+  publishedYear?: number
+  externalRefs?: Book['externalRefs']
+  shelfNote?: string
+  source: Book['source']
+  lookedUpAt?: string
+}
+
+/**
+ * Upsert a book. Its uuid is minted once and never changes (D3). Recipes that point at
+ * it get their citation text refreshed so a corrected title shows everywhere.
+ */
+export async function saveBook(draft: BookDraft): Promise<Book> {
+  const timestamp = now()
+  const uuid = draft.uuid ?? newId()
+  const existing = await db.books.get(uuid)
+  const isbn13 = draft.externalRefs?.isbn13 ? normalizeIsbn(draft.externalRefs.isbn13) : undefined
+  const book: Book = {
+    uuid,
+    createdAt: existing?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+    title: draft.title.trim() || 'Untitled book',
+    ...(draft.subtitle?.trim() ? { subtitle: draft.subtitle.trim() } : {}),
+    authors: draft.authors.map((a) => a.trim()).filter(Boolean),
+    ...(draft.publisher?.trim() ? { publisher: draft.publisher.trim() } : {}),
+    ...(draft.publishedYear ? { publishedYear: draft.publishedYear } : {}),
+    externalRefs: { ...(draft.externalRefs ?? {}), ...(isbn13 ? { isbn13 } : {}) },
+    ...(existing?.cover ? { cover: existing.cover } : {}),
+    ...(draft.shelfNote?.trim() ? { shelfNote: draft.shelfNote.trim() } : {}),
+    ...(draft.lookedUpAt ?? existing?.lookedUpAt ? { lookedUpAt: draft.lookedUpAt ?? existing?.lookedUpAt } : {}),
+    source: draft.source,
+  }
+  await db.books.put(book)
+
+  const citation = bookCitation(book)
+  const linked = await db.recipes.where('source.bookUuid').equals(uuid).toArray()
+  for (const recipe of linked) {
+    if (recipe.source.citation !== citation) {
+      await db.recipes.put({ ...recipe, source: { ...recipe.source, citation } })
+    }
+  }
+  return book
+}
+
+/**
+ * Deleting a book never deletes a recipe. Recipes that pointed at it keep their citation
+ * text and lose the link — the page number still means something on its own.
+ */
+export async function deleteBook(uuid: string): Promise<void> {
+  const book = await db.books.get(uuid)
+  if (!book) return
+  const linked = await db.recipes.where('source.bookUuid').equals(uuid).toArray()
+  for (const recipe of linked) {
+    const { bookUuid: _dropped, ...rest } = recipe.source
+    await db.recipes.put({ ...recipe, source: rest })
+  }
+  if (book.cover) await db.photos.delete(book.cover.uuid)
+  await db.books.delete(uuid)
+}
+
+export async function recipesForBook(bookUuid: string): Promise<Recipe[]> {
+  const rows = await db.recipes.where('source.bookUuid').equals(bookUuid).toArray()
+  return rows.sort((a, b) => (a.source.pageStart ?? 1e9) - (b.source.pageStart ?? 1e9) || a.title.localeCompare(b.title))
+}
+
+/** Store the downloaded cover once; a book without one is still a book. */
+export async function setBookCover(bookUuid: string, blob: Blob, size?: { width: number; height: number }): Promise<void> {
+  const book = await db.books.get(bookUuid)
+  if (!book) return
+  if (book.cover) await db.photos.delete(book.cover.uuid)
+  const ref = await savePhoto(blob, 'other', size)
+  await db.books.put({ ...book, cover: ref, updatedAt: now() })
+}
+
+/* -------------------------------------------------------------------- photos */
+
+/** Blobs live in their own table so a list query never drags JPEGs into memory. */
+export async function savePhoto(blob: Blob, kind: PhotoRef['kind'], size?: { width: number; height: number }): Promise<PhotoRef> {
+  const row: PhotoBlob = { uuid: newId(), blob, mime: blob.type || 'image/jpeg', createdAt: now() }
+  await db.photos.put(row)
+  return { uuid: row.uuid, kind, bytes: blob.size, ...(size ?? {}) }
+}
+
+export async function getPhotoBlob(uuid: string): Promise<Blob | undefined> {
+  return (await db.photos.get(uuid))?.blob
+}
+
+/**
+ * Attach a photo of the dish she made. The first dish photo is the recipe's thumbnail.
+ * Dish photos are hers: a later crop may overwrite the bytes (see replacePhotoBytes).
+ * Page photos (phase 4) are evidence and never go through that path.
+ */
+export async function addDishPhoto(recipeUuid: string, blob: Blob, size?: { width: number; height: number }): Promise<PhotoRef | undefined> {
+  const recipe = await db.recipes.get(recipeUuid)
+  if (!recipe) return undefined
+  const ref = await savePhoto(blob, 'dish', size)
+  await db.recipes.put({ ...recipe, photos: [...recipe.photos, ref], updatedAt: now() })
+  return ref
+}
+
+/**
+ * Overwrite a photo's bytes in place — the destructive crop for a DISH photo. Same uuid,
+ * so nothing that references it changes. Refuses page photos: those are cropped
+ * non-destructively with a `crop` rect, because the original is the evidence.
+ */
+export async function replacePhotoBytes(recipeUuid: string, photoUuid: string, blob: Blob, size?: { width: number; height: number }): Promise<void> {
+  const recipe = await db.recipes.get(recipeUuid)
+  const ref = recipe?.photos.find((p) => p.uuid === photoUuid)
+  if (!recipe || !ref) return
+  if (ref.kind === 'page') throw new Error('Page photos are evidence and are never overwritten.')
+  const row = await db.photos.get(photoUuid)
+  if (!row) return
+  await db.photos.put({ ...row, blob, mime: blob.type || row.mime })
+  const photos = recipe.photos.map((p) => (p.uuid === photoUuid ? { ...p, bytes: blob.size, ...(size ?? {}) } : p))
+  await db.recipes.put({ ...recipe, photos, updatedAt: now() })
+}
+
+export async function removePhoto(recipeUuid: string, photoUuid: string): Promise<void> {
+  const recipe = await db.recipes.get(recipeUuid)
+  if (!recipe) return
+  await db.photos.delete(photoUuid)
+  await db.recipes.put({ ...recipe, photos: recipe.photos.filter((p) => p.uuid !== photoUuid), updatedAt: now() })
 }
 
 /* ------------------------------------------------------------------ settings */
