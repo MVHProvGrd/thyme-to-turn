@@ -130,3 +130,14 @@ describe('canonicalNames', () => {
     expect(canonicalNames(groups)).toEqual(['flour', 'salt', 'apple'])
   })
 })
+
+describe('normalize: instruction tails', () => {
+  it('drops "to taste" and friends so the ingredient is the ingredient', () => {
+    expect(normalize('Salt to taste')).toBe('salt')
+    expect(normalize('oil as needed')).toBe('oil')
+    expect(normalize('chopped parsley if desired')).toBe('parsley')
+    expect(normalize('lime wedges for serving')).toBe('lime wedge')
+    // Word boundaries: "tomato served" must not lose its "to serve".
+    expect(normalize('tomato served warm')).toBe('tomato served warm')
+  })
+})

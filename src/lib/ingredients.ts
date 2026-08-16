@@ -149,6 +149,9 @@ export function normalize(name: string): string {
     .replace(/\([^)]*\)/g, ' ')
     // Everything after the first comma is a note: "flour, sifted".
     .split(',')[0]
+    // "salt to taste", "oil as needed", "parsley if desired" — the tail is an instruction,
+    // not part of the name. Without this "salt to taste" becomes the ingredient "salt taste".
+    .replace(/\b(to taste|as needed|as required|if desired|for serving|for garnish|to serve|to garnish)\b.*$/, ' ')
     .replace(/[^a-z0-9 '-]/g, ' ')
 
   const words = base
@@ -269,12 +272,20 @@ export function canonicalNames(groups: { items: Ingredient[] }[]): string[] {
  */
 export const SEEDED_STAPLES = [
   'salt',
+  'kosher salt',
+  'sea salt',
   'pepper',
   'black pepper',
+  'ground black pepper',
+  'freshly-ground black pepper',
   'water',
   'oil',
   'olive oil',
+  'extra-virgin olive oil',
+  'virgin olive oil', // "extra virgin olive oil" once `extra` is stripped as a preparation word
+  'vegetable oil',
   'butter',
   'flour',
+  'all-purpose flour',
   'sugar',
 ]
