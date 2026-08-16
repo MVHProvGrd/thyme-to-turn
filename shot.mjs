@@ -11,8 +11,12 @@ mkdirSync(OUT, { recursive: true })
 
 /**
  * A real PNG, drawn here rather than committed as a fixture: the photo pipeline decodes,
- * downscales and re-encodes, so it needs actual pixels. Coloured bands make it obvious in
- * a screenshot which part of the picture the crop kept.
+ * downscales and re-encodes, so it needs actual pixels.
+ *
+ * It is drawn as a PAGE -- a sheet of pale paper on a dark table, carrying a block of
+ * ragged lines of print inside its margins -- because that is what the ink detector in
+ * lib/ink.ts has to find. A photo of coloured bands would exercise the crop plumbing while
+ * telling us nothing about whether "Find the text" actually lands on the text.
  */
 function testPng(width = 480, height = 320) {
   const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -45,15 +49,33 @@ function testPng(width = 480, height = 320) {
     raw[at] = 0 // no per-row filter
     at += 1
     for (let x = 0; x < width; x += 1) {
-      const band = Math.floor((y / height) * 4)
-      raw[at] = [0xc9, 0x7f, 0x2f, 0x1f][band] // R
-      raw[at + 1] = [0x6b, 0xb0, 0x53, 0x2a][band] // G
-      raw[at + 2] = [0x32, 0x3f, 0x20, 0x16][band] // B
-      if (x % 60 < 4) {
-        raw[at] = 0xf6
-        raw[at + 1] = 0xf3
-        raw[at + 2] = 0xe9
+      // Outside the sheet: the table it is lying on.
+      let r = 0x5a
+      let g = 0x4a
+      let b = 0x3c
+      const onPaper = x > width * 0.06 && x < width * 0.94 && y > height * 0.05 && y < height * 0.95
+      if (onPaper) {
+        // Aged paper.
+        r = 0xf4
+        g = 0xef
+        b = 0xe1
+        // A block of print, inset inside the paper's own margins. Lines with leading
+        // between them, because a row profile that never dips is not a page.
+        const inBlock =
+          x > width * 0.2 && x < width * 0.78 && y > height * 0.22 && y < height * 0.74
+        const line = Math.floor(((y - height * 0.22) / (height * 0.52)) * 11)
+        const withinLine = ((y - height * 0.22) / (height * 0.52)) * 11 - line < 0.55
+        // Ragged right edge, so it reads as text rather than a filled rectangle.
+        const ragged = x < width * (0.6 + 0.18 * ((line * 7) % 5) / 5)
+        if (inBlock && withinLine && ragged) {
+          r = 0x2b
+          g = 0x26
+          b = 0x22
+        }
       }
+      raw[at] = r
+      raw[at + 1] = g
+      raw[at + 2] = b
       at += 3
     }
   }
@@ -430,8 +452,24 @@ await page.getByRole('button', { name: 'Read the page' }).waitFor()
 await page.waitForTimeout(300)
 await page.screenshot({ path: `${OUT}/32-parse-pages.png` })
 
-// Box the recipe: what gets SENT narrows, what gets STORED stays the whole page. Better
-// parse, roughly half the image tokens, and the evidence is still there if it goes wrong.
+// The box is already drawn: capture runs the ink detector, so she does not draw the same
+// rectangle by hand on every page. It is a suggestion — "Whole page" undoes it.
+await page.waitForSelector('text=Only the box is sent')
+await page.waitForTimeout(200)
+await page.screenshot({ path: `${OUT}/32c-parse-autoboxed.png` })
+
+// Undo it, then ask for it back. "Find the text" is the retry when the first guess is
+// wrong or she has reset it.
+await page.getByRole('button', { name: 'Whole page' }).first().click()
+await page.waitForSelector('text=Drag a box around the recipe')
+await page.waitForTimeout(150)
+await page.screenshot({ path: `${OUT}/32d-parse-wholepage.png` })
+await page.getByRole('button', { name: 'Find the text' }).first().click()
+await page.waitForSelector('text=Only the box is sent')
+await page.waitForTimeout(200)
+await page.screenshot({ path: `${OUT}/32e-parse-refound.png` })
+
+// Box it by hand too: the drag still wins over whatever the detector guessed.
 const firstPage = page.locator('img[alt="Page 1"]')
 const frame = await firstPage.boundingBox()
 await page.mouse.move(frame.x + frame.width * 0.15, frame.y + frame.height * 0.2)
@@ -440,7 +478,12 @@ await page.mouse.move(frame.x + frame.width * 0.85, frame.y + frame.height * 0.7
 await page.mouse.up()
 await page.waitForSelector('text=Only the box is sent')
 await page.waitForTimeout(200)
-await page.screenshot({ path: `${OUT}/32c-parse-boxed.png` })
+await page.screenshot({ path: `${OUT}/32f-parse-boxed-by-hand.png` })
+
+// The bring-your-own-AI path now has a way to actually hand over the pages.
+await page.getByRole('button', { name: /Send .* to my AI/ }).scrollIntoViewIfNeeded()
+await page.waitForTimeout(150)
+await page.screenshot({ path: `${OUT}/32g-parse-send-to-ai.png` })
 
 // The offline / no-key path: keep the pages, read them when there is signal. An unverified
 // recipe carrying page photos IS the queue — no extra table, no lost photographs.

@@ -12,6 +12,7 @@
 export const MAX_EDGE = 2000
 export const JPEG_QUALITY = 0.85
 
+import { inkBox } from '../lib/ink'
 import type { CropRect } from '../lib/types'
 
 export type StoredImage = { blob: Blob; mime: 'image/jpeg'; width: number; height: number }
@@ -83,4 +84,49 @@ export async function prepareImage(source: Blob, crop?: CropRect, maxEdge = MAX_
 
   const blob = await toJpeg(canvas)
   return { blob, mime: 'image/jpeg', width, height }
+}
+
+/**
+ * How wide the greyscale copy is when hunting for the text block. A page's margins are a
+ * coarse feature — 240px finds them just as well as 2000px and does it in a few
+ * milliseconds on a phone, which is what lets this run on every capture without a spinner.
+ */
+const INK_SAMPLE_EDGE = 240
+
+/**
+ * Suggest a box around the print on a photographed page, or undefined when there is nothing
+ * confident to say. The decision lives in `lib/ink.ts`; this only supplies the pixels.
+ *
+ * The result is a SUGGESTION. It is drawn into the box she can drag, and "Whole page" puts
+ * it back — an automatic crop that silently dropped half the ingredients would be exactly
+ * the confident-wrong-answer failure the verification gate exists to prevent.
+ */
+export async function findTextBox(source: Blob): Promise<CropRect | undefined> {
+  try {
+    const image = await decode(source)
+    const full = sizeOf(image)
+    const scale = Math.min(1, INK_SAMPLE_EDGE / Math.max(full.width, full.height))
+    const width = Math.max(1, Math.round(full.width * scale))
+    const height = Math.max(1, Math.round(full.height * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return undefined
+    ctx.drawImage(image, 0, 0, width, height)
+    if ('close' in image) image.close()
+
+    const { data } = ctx.getImageData(0, 0, width, height)
+    const grey = new Uint8Array(width * height)
+    for (let i = 0; i < grey.length; i += 1) {
+      const at = i * 4
+      // Rec. 601 luma. Ink is ink whatever colour the paper has aged to.
+      grey[i] = (data[at] * 299 + data[at + 1] * 587 + data[at + 2] * 114) / 1000
+    }
+    return inkBox({ data: grey, width, height })
+  } catch {
+    // A photo we cannot decode is not worth an error here — she can still draw the box.
+    return undefined
+  }
 }

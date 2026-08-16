@@ -160,7 +160,14 @@ export default function Settings() {
             </p>
             <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
               It stays in this browser, never goes into a backup, and is only sent to Anthropic
-              when you ask it to read a photo. Roughly a penny or two a recipe.
+              when you ask it to read a photo. Around 8 to 9 cents a recipe, so roughly $13 for a
+              150-recipe book.
+            </p>
+            <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+              A key comes from a separate developer account at console.anthropic.com, with its own
+              billing. A Claude subscription does not include one. If you would rather not set that
+              up, the photograph screen can send pages to whichever assistant you already pay for,
+              which needs no key and costs nothing per recipe.
             </p>
           </div>
           {apiKey ? (

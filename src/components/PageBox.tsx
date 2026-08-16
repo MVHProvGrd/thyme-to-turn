@@ -17,16 +17,24 @@ import type { CropRect } from '../lib/types'
  * Drag from one corner to the other. Coordinates are fractional (0–1) so they survive the
  * downscale that happens later, and any box smaller than a few percent is treated as a
  * stray tap rather than an intent to crop a sliver.
+ *
+ * "Find the text" asks the screen to box the print automatically (lib/ink.ts). It is a
+ * SUGGESTION she can drag or undo, never a silent crop -- the detector finds ink, not
+ * text, and a confident wrong box that drops half the ingredients is the failure mode this
+ * whole app is arranged to avoid.
  */
 export default function PageBox({
   blob,
   crop,
   onChange,
+  onFindText,
   label,
 }: {
   blob: Blob
   crop: CropRect | undefined
   onChange: (crop: CropRect | undefined) => void
+  /** Ask for the print to be boxed automatically. Omitted when the screen can't offer it. */
+  onFindText?: () => void
   label: string
 }) {
   const url = useObjectUrl(blob)
@@ -104,15 +112,26 @@ export default function PageBox({
         <span className="font-mono text-[11px] leading-[1.6] text-ink-soft">
           {crop ? 'Only the box is sent. The whole page is kept.' : 'Drag a box around the recipe.'}
         </span>
-        {crop ? (
-          <button
-            type="button"
-            onClick={() => onChange(undefined)}
-            className="min-h-[44px] shrink-0 font-mono text-[11px] uppercase tracking-[0.08em] text-thyme underline underline-offset-4"
-          >
-            Whole page
-          </button>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-3">
+          {onFindText ? (
+            <button
+              type="button"
+              onClick={onFindText}
+              className="min-h-[44px] font-mono text-[11px] uppercase tracking-[0.08em] text-thyme underline underline-offset-4"
+            >
+              Find the text
+            </button>
+          ) : null}
+          {crop ? (
+            <button
+              type="button"
+              onClick={() => onChange(undefined)}
+              className="min-h-[44px] font-mono text-[11px] uppercase tracking-[0.08em] text-thyme underline underline-offset-4"
+            >
+              Whole page
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   )

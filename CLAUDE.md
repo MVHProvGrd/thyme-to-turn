@@ -72,9 +72,11 @@ this project must never hold. Everything around it is tested; the call itself is
 ```
 lib/        types.ts · ids.ts · ingredients.ts · search.ts · backup-format.ts
             pantry.ts (matchPantry · nextQuestions · shortlist · stateFor) · emoji.ts
-            categories.ts · isbn.ts · books.ts · parse-result.ts
+            categories.ts · isbn.ts · books.ts · parse-result.ts · scale.ts
+            pasted-parse.ts · ink.ts (find the print on a photographed page)
 platform/   clock.ts · prefs.ts (localStorage prefs + sessionStorage marks) · files.ts
-            motion.ts · barcode.ts (the scanner seam) · camera.ts (downscale + crop)
+            motion.ts · barcode.ts (the scanner seam) · camera.ts (downscale + crop + findTextBox)
+            clipboard.ts · share.ts (the system share sheet)
 api/        openlibrary.ts — the only file that talks to Open Library
             key.ts (the ONLY place the secret is touched) · prompts.ts · claude.ts
 db/         schema.ts (v1) · db.ts · repo.ts · backup.ts
@@ -225,6 +227,31 @@ seen the live page.
 - **The prompt captures functional content only** — ingredients, method, yield, times — and
   is explicitly told to ignore the headnote and the author's prose. That is a rights
   posture as much as a product one (05-SOURCES-AND-RIGHTS.md), and it is not decoration.
+- **The box is suggested, never applied silently.** Capture runs `platform/camera.ts`
+  `findTextBox`, which hands a small greyscale copy to `lib/ink.ts` and gets back a
+  rectangle. It is drawn into the draggable box with "Whole page" to undo and "Find the
+  text" to retry. **Two stages, and the first is what makes it work on a real photograph**:
+  a page sits on a worktop, and a dark table is darker than the print, so a single
+  threshold over the whole frame counts the table as ink and the box grows to the edges.
+  Find the PAPER first (the bright region), then the ink inside it — there is a regression
+  test for exactly this (`ink.test.ts`, "ignores the table the page is lying on"). It finds
+  INK, not TEXT: a photo on the page or a shadow in the gutter widens the box, which is
+  precisely why she can always override it. Never auto-apply a crop to the SENT image
+  without showing her the box first.
+- **`navigator.share` is how pages leave the app** (`platform/share.ts`). This closes a real
+  hole: a photo taken through `<input capture>` on iOS is handed to the page and is NOT
+  saved to her camera roll, so "give it your photo of the page" was advice she could not
+  follow — the only copy lived in IndexedDB. "Send to my AI" puts the boxed JPEGs and the
+  instructions into the system sheet and she picks the app. The files are prepared in a
+  `useEffect` BEFORE the tap, because iOS refuses a share that arrives after an await it
+  did not see the user start. Desktop falls back to copy-the-prompt plus download. This is
+  share-to-an-app-she-picks, not publish (non-negotiable 8) — and she asked for it
+  explicitly (2026-08-16).
+- **A JSON export cannot carry the recipe text.** Asked for "a single JSON to hand an
+  external AI": reading the photo IS the job being outsourced, so there is nothing to put
+  in the file until an AI or an OCR engine has read it. Base64 images in JSON are ~1 MB a
+  page and cannot be pasted into a chat box. The answer is to share the IMAGES plus the
+  prompt, which is what the share sheet does. Do not build a base64-in-JSON export.
 - **A page photo's box says what is SENT, not what is stored** (`components/PageBox.tsx`).
   She drags a rectangle around the recipe; the whole page is saved with the box recorded as
   a `crop` rect on the `PhotoRef`, and only the boxed region goes to the model. Better parse,

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Screen from '../components/Screen'
 import Button from '../components/Button'
@@ -9,9 +9,11 @@ import { hasApiKey } from '../api/key'
 import { BRING_YOUR_OWN_AI_PROMPT } from '../api/prompts'
 import { savePhoto, saveRecipe } from '../db/repo'
 import { PastedParseError, readPastedParse } from '../lib/pasted-parse'
-import { prepareImage } from '../platform/camera'
+import { findTextBox, prepareImage } from '../platform/camera'
 import type { CropRect } from '../lib/types'
 import { copyText } from '../platform/clipboard'
+import { downloadBlob } from '../platform/files'
+import { shareFiles } from '../platform/share'
 
 /**
  * Photograph a page, get a filled-in form.
@@ -67,6 +69,76 @@ export default function RecipeParse() {
     }
   }
 
+  /**
+   * The pages as shareable files, kept ready ahead of the tap.
+   *
+   * iOS refuses a share sheet that arrives after an await it did not see the user start,
+   * so the cropping has to be finished BEFORE she presses the button, not during it.
+   */
+  const [pages, setPages] = useState<File[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      if (shots.length === 0) {
+        setPages([])
+        return
+      }
+      try {
+        const files = await Promise.all(
+          shots.map(async (shot, index) => {
+            const blob = shot.crop ? (await prepareImage(shot.blob, shot.crop)).blob : shot.blob
+            return new File([blob], `page-${index + 1}.jpg`, { type: 'image/jpeg' })
+          }),
+        )
+        if (!cancelled) setPages(files)
+      } catch {
+        if (!cancelled) setPages([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [shots])
+
+  /** Re-box one page on request, for when she has reset it or the first guess was wrong. */
+  async function findText(index: number) {
+    const shot = shots[index]
+    if (!shot) return
+    const crop = await findTextBox(shot.blob)
+    if (!crop) {
+      toast("Couldn't pick out the text -- drag a box around it.")
+      return
+    }
+    setShots((current) => current.map((item, i) => (i === index ? { ...item, crop } : item)))
+  }
+
+  /**
+   * Hand the boxed pages and the instructions to whichever assistant she picks from the
+   * system share sheet. This is the missing half of the bring-your-own-AI path: a photo
+   * taken in the app never reached her camera roll, so "give it your photo" was advice she
+   * could not follow.
+   *
+   * Where the browser cannot share files (desktop, mostly) it copies the instructions and
+   * saves the pages instead, so the path still works -- it just takes her two more taps.
+   */
+  async function sendToAI() {
+    if (pages.length === 0) return
+    const result = await shareFiles(pages, BRING_YOUR_OWN_AI_PROMPT, 'Recipe page')
+    if (result === 'shared') {
+      toast('Sent. Paste its reply back here when it answers.')
+      return
+    }
+    if (result === 'cancelled') return
+    const copied = await copyText(BRING_YOUR_OWN_AI_PROMPT)
+    for (const page of pages) downloadBlob(page.name, page)
+    toast(
+      copied
+        ? 'Instructions copied and pages saved. Attach them to your assistant.'
+        : 'Pages saved. Copy the instructions by hand and attach them.',
+    )
+  }
+
   async function addFiles(files: File[]) {
     setError(null)
     setWorking('Getting the photos ready…')
@@ -74,7 +146,10 @@ export default function RecipeParse() {
       const prepared: Shot[] = []
       for (const file of files) {
         const image = await prepareImage(file)
-        prepared.push({ blob: image.blob, width: image.width, height: image.height })
+        // Box the print straight away. It is only a suggestion -- "Whole page" undoes it,
+        // and it saves her drawing the same rectangle by hand on every single page.
+        const crop = await findTextBox(image.blob)
+        prepared.push({ blob: image.blob, width: image.width, height: image.height, crop })
       }
       setShots((current) => [...current, ...prepared])
     } catch {
@@ -153,7 +228,8 @@ export default function RecipeParse() {
         {!hasApiKey() ? (
           <div className="rounded-sm border border-rule border-l-2 border-l-leaf bg-card px-[14px] py-[13px]">
             <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
-              Add your Claude API key in Settings to read photos. You can still add recipes by typing.
+              No API key, so this app can't read the photo itself. Photograph the page anyway and
+              send it to an AI you already have, below — or add a key in Settings.
             </p>
             <button
               type="button"
@@ -177,6 +253,7 @@ export default function RecipeParse() {
                 <PageBox
                   blob={shot.blob}
                   crop={shot.crop}
+                  onFindText={() => void findText(index)}
                   label={`Page ${index + 1}`}
                   onChange={(crop) =>
                     setShots((current) => current.map((s, i) => (i === index ? { ...s, crop } : s)))
@@ -230,10 +307,15 @@ export default function RecipeParse() {
             Or use any AI you already have
           </h2>
           <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
-            No key needed, and nothing to pay per recipe. Copy the instructions, open whichever
-            assistant you use, give it your photo of the page, then paste its reply back here.
-            You still check everything before it saves.
+            No key needed, and nothing to pay per recipe. Send the pages to whichever assistant
+            you already use, then paste its reply back here. You still check everything before
+            it saves.
           </p>
+          {shots.length > 0 ? (
+            <Button className="self-start" onClick={() => void sendToAI()}>
+              {shots.length === 1 ? 'Send the page to my AI' : `Send ${shots.length} pages to my AI`}
+            </Button>
+          ) : null}
           <Button
             variant="secondary"
             className="self-start"
@@ -243,7 +325,7 @@ export default function RecipeParse() {
               )
             }
           >
-            Copy the instructions
+            Copy the instructions on their own
           </Button>
           <label className="mt-1 flex flex-col gap-[6px]">
             <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft">
