@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import Screen, { ScreenHeader } from '../components/Screen'
 import Button from '../components/Button'
-import Tile from '../components/Tile'
+import Disclosure, { CheckRow } from '../components/Disclosure'
 import { useToast } from '../components/Toast'
 import { exportBackup, importBackup } from '../db/backup'
 import {
@@ -11,11 +11,12 @@ import {
   countStarterRecipes,
   listIngredients,
   removeStarterRecipes,
+  addStapleByName,
   setStaple,
   updateSettings,
   wipeEverything,
 } from '../db/repo'
-import { emojiFor } from '../lib/emoji'
+import { fold } from '../lib/ingredients'
 import { clearApiKey, getApiKey, setApiKey } from '../api/key'
 import { addCategoryToList, listCategories, removeCategoryFromList } from '../db/repo'
 import { STARTER_COUNT, loadStarterRecipes } from '../seed'
@@ -45,6 +46,25 @@ export default function Settings() {
   const [newCategory, setNewCategory] = useState('')
   // Read once into local state; api/key.ts is the only thing that touches the secret.
   const [apiKey, setApiKeyValue] = useState(() => getApiKey())
+  const [stapleQuery, setStapleQuery] = useState('')
+  const [newStaple, setNewStaple] = useState('')
+
+  async function addStaple() {
+    const name = newStaple
+    setNewStaple('')
+    if (name.trim()) await addStapleByName(name)
+  }
+
+  /*
+   * A registry with a hundred recipes in it runs to hundreds of entries, and showing them
+   * all was a wall. So: her staples always, then the ingredients that turn up most often,
+   * and a search for anything else.
+   */
+  const staples = (ingredients ?? []).filter((entry) => entry.isStaple)
+  const q = fold(stapleQuery)
+  const suggestions = q
+    ? (ingredients ?? []).filter((entry) => !entry.isStaple && entry.canonical.includes(q))
+    : (ingredients ?? []).filter((entry) => !entry.isStaple).slice(0, 10)
 
   async function addCat() {
     const name = newCategory
@@ -155,37 +175,79 @@ export default function Settings() {
           ) : null}
         </section>
 
-        <section className="flex flex-col gap-3">
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
-            Staples — never counted as missing
-          </h2>
+        <Disclosure title="Staples" note={`${staples.length} always in`}>
           <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
             Things that are always in the cupboard. The dinner screen never asks about a staple
-            and never counts one as missing or not sure — so a wrong one here gives a confidently
-            wrong answer there.
+            and never counts one as missing — so a wrong one here gives a confidently wrong
+            answer there.
           </p>
-          {ingredients && ingredients.length > 0 ? (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Staples">
-              {staplesFirst(ingredients).map((entry) => (
-                <Tile
+
+          {staples.length > 0 ? (
+            <div className="flex flex-col" role="group" aria-label="Your staples">
+              {staples.map((entry) => (
+                <CheckRow
                   key={entry.uuid}
-                  name={entry.canonical}
-                  emoji={emojiFor(entry.canonical)}
-                  state={entry.isStaple ? 'have' : 'unknown'}
-                  ariaLabel={`${entry.canonical}, ${entry.isStaple ? 'a staple' : 'not a staple'}`}
-                  onTap={() => void setStaple(entry.uuid, !entry.isStaple)}
+                  label={entry.canonical}
+                  checked
+                  onChange={() => void setStaple(entry.uuid, false)}
                 />
               ))}
             </div>
           ) : (
-            <p className="font-mono text-xs text-ink-soft">
-              Ingredients show up here as you add recipes.
-            </p>
+            <p className="font-mono text-[11px] text-ink-soft">Nothing marked yet.</p>
           )}
-        </section>
 
-        <section className="flex flex-col gap-3">
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">Categories</h2>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <input
+              value={newStaple}
+              onChange={(event) => setNewStaple(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void addStaple()
+                }
+              }}
+              placeholder="add one of your own"
+              aria-label="New staple"
+              className="min-h-[48px] rounded-sm border border-rule bg-paper px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+            />
+            <Button variant="secondary" onClick={() => void addStaple()}>
+              Add
+            </Button>
+          </div>
+
+          <input
+            type="search"
+            value={stapleQuery}
+            onChange={(event) => setStapleQuery(event.target.value)}
+            placeholder="search your ingredients…"
+            aria-label="Search ingredients"
+            className="min-h-[44px] w-full rounded-sm border border-rule bg-paper px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+          />
+          <div className="flex flex-col" role="group" aria-label="Ingredients you could mark">
+            {suggestions.map((entry) => (
+              <CheckRow
+                key={entry.uuid}
+                label={entry.canonical}
+                checked={false}
+                hint={entry.seenCount > 0 ? `${entry.seenCount}` : undefined}
+                onChange={() => void setStaple(entry.uuid, true)}
+              />
+            ))}
+            {suggestions.length === 0 ? (
+              <p className="font-mono text-[11px] text-ink-soft">
+                {stapleQuery ? 'Nothing by that name.' : 'Ingredients show up here as you add recipes.'}
+              </p>
+            ) : null}
+          </div>
+          {!stapleQuery && (ingredients?.length ?? 0) > staples.length + 10 ? (
+            <p className="font-mono text-[11px] text-ink-soft">
+              Showing the ten most used. Search for anything else.
+            </p>
+          ) : null}
+        </Disclosure>
+
+        <Disclosure title="Categories" note={`${(categories ?? []).length}`}>
           <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
             Breakfast, soup, dessert — or anything you like. Put a recipe in one while you type it
             in, then search by it. Removing one here never removes it from a recipe.
@@ -227,7 +289,7 @@ export default function Settings() {
               Add
             </Button>
           </div>
-        </section>
+        </Disclosure>
 
         <section className="flex flex-col gap-3">
           <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">Starter recipes</h2>
@@ -309,9 +371,4 @@ export default function Settings() {
       </div>
     </Screen>
   )
-}
-
-/** Staples first so she can see the list she's trusting; the rest by how often they turn up. */
-function staplesFirst<T extends { isStaple: boolean }>(entries: T[]): T[] {
-  return [...entries.filter((e) => e.isStaple), ...entries.filter((e) => !e.isStaple)]
 }

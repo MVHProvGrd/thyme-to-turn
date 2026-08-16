@@ -272,7 +272,10 @@ await page.getByRole('button', { name: 'Reset' }).first().click()
 
 // Staples live in Settings; toggling one changes the ranking, so it must be visible.
 await page.goto(`${BASE}#/settings`)
-await page.getByRole('button', { name: 'salt, a staple' }).waitFor()
+// Settings sections stay shut until she opens one — the registry runs to hundreds of rows.
+await page.locator('summary', { hasText: 'Staples' }).click()
+await page.getByRole('group', { name: 'Your staples' }).waitFor()
+await page.waitForTimeout(200)
 await page.screenshot({ path: `${OUT}/14-settings-staples.png` })
 
 // The starter set: 100 recipes from Settings, then the dinner screen with something real
@@ -313,6 +316,7 @@ await page.screenshot({ path: `${OUT}/19-dinner-have-ranking.png` })
 
 // Settings owns the vocabulary: the presets, plus anything she invents.
 await page.goto(`${BASE}#/settings`)
+await page.locator('summary', { hasText: 'Categories' }).click()
 await page.getByRole('button', { name: 'Remove the Breakfast category' }).waitFor()
 await page.getByLabel('New category').fill('Sunday lunch')
 await page.getByRole('button', { name: 'Add', exact: true }).click()

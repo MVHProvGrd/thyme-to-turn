@@ -256,6 +256,18 @@ export async function listIngredients(): Promise<IngredientEntry[]> {
   return rows.sort((a, b) => b.seenCount - a.seenCount || a.canonical.localeCompare(b.canonical))
 }
 
+/**
+ * Mark something a staple by name, minting a registry entry if nothing matches. She knows
+ * what lives in her cupboard before a recipe has ever mentioned it, and waiting for one to
+ * name it first would be a silly reason to make her wait.
+ */
+export async function addStapleByName(name: string): Promise<void> {
+  const canonical = normalize(name)
+  if (!canonical) return
+  const uuid = await resolveIngredientUuid(canonical, new Map())
+  await setStaple(uuid, true)
+}
+
 export async function setStaple(uuid: string, isStaple: boolean): Promise<void> {
   const entry = await db.ingredients.get(uuid)
   if (!entry) return
