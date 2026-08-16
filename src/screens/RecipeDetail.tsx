@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import Screen from '../components/Screen'
 import Button from '../components/Button'
+import Photo from '../components/Photo'
 import SourceLine from '../components/SourceLine'
-import { getRecipe, listIngredients } from '../db/repo'
+import { addDishPhoto, getPhotoBlob, getRecipe, listIngredients, removePhoto } from '../db/repo'
+import { prepareImage } from '../platform/camera'
 import { formatUnit } from '../lib/ingredients'
 import { stateFor } from '../lib/pantry'
 import type { IngredientState } from '../lib/pantry'
@@ -31,7 +33,23 @@ export default function RecipeDetail() {
   // Read once on open — this screen never writes them.
   const [marks] = useState<Record<string, IngredientState>>(() => readSession('marks', {}))
 
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [photoError, setPhotoError] = useState<string | null>(null)
   const [cook, setCook] = useState(() => readPref('cookMode', false))
+
+  /**
+   * Her own photo of the dish. Downscaled to 2000px before it is stored — a phone shot is
+   * 4–8 MB and two hundred of those is an eviction waiting to happen.
+   */
+  async function addPhoto(file: File) {
+    setPhotoError(null)
+    try {
+      const image = await prepareImage(file)
+      await addDishPhoto(uuid, image.blob, { width: image.width, height: image.height })
+    } catch {
+      setPhotoError("That photo couldn't be read. Try another one.")
+    }
+  }
   const [done, setDone] = useState<Record<string, boolean>>(() => readPref(`done:${uuid}`, {}))
 
   function toggleCook() {
@@ -104,11 +122,25 @@ export default function RecipeDetail() {
           >
             {recipe.title}
           </h1>
-          <SourceLine
-            citation={recipe.source.citation}
-            page={recipe.source.pageStart}
-            className="!text-thyme underline underline-offset-[3px]"
-          />
+          {recipe.source.bookUuid ? (
+            <button
+              type="button"
+              onClick={() => navigate(`/book/${recipe.source.bookUuid}`)}
+              className="min-h-[44px] self-start text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+            >
+              <SourceLine
+                citation={recipe.source.citation}
+                page={recipe.source.pageStart}
+                className="!text-thyme underline underline-offset-[3px]"
+              />
+            </button>
+          ) : (
+            <SourceLine
+              citation={recipe.source.citation}
+              page={recipe.source.pageStart}
+              className="!text-thyme underline underline-offset-[3px]"
+            />
+          )}
         </div>
 
         {recipe.ingredients.map((group, groupIndex) => (
@@ -178,6 +210,62 @@ export default function RecipeDetail() {
           </section>
         ) : null}
 
+        <section className="flex flex-col gap-2">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
+            Photos of it
+          </h2>
+          {recipe.photos.length > 0 ? (
+            <ul className="flex flex-wrap gap-2">
+              {recipe.photos.map((ref) => (
+                <li key={ref.uuid} className="flex flex-col gap-1">
+                  <DishPhoto uuid={ref.uuid} title={recipe.title} />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/recipe/${recipe.uuid}/photo/${ref.uuid}/crop`)}
+                      aria-label={`Crop this photo of ${recipe.title}`}
+                      className="min-h-[44px] font-mono text-[11px] uppercase tracking-[0.08em] text-thyme"
+                    >
+                      Crop
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removePhoto(recipe.uuid, ref.uuid)}
+                      aria-label={`Remove this photo of ${recipe.title}`}
+                      className="min-h-[44px] font-mono text-[11px] uppercase tracking-[0.08em] text-copper"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+              A photo of what you actually made turns the recipe list into your own food.
+            </p>
+          )}
+          <Button variant="secondary" className="self-start" onClick={() => fileInput.current?.click()}>
+            Add a photo
+          </Button>
+          {/* One control, camera and library both — boring and universal on either phone. */}
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) void addPhoto(file)
+            }}
+          />
+          {photoError ? (
+            <p className="font-mono text-[11px] leading-[1.6] text-copper">{photoError}</p>
+          ) : null}
+        </section>
+
         {recipe.notes ? (
           <section className="flex flex-col gap-2">
             <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">Her notes</h2>
@@ -187,6 +275,12 @@ export default function RecipeDetail() {
       </div>
     </Screen>
   )
+}
+
+/** One stored dish photo. Fetches its own blob so the list above stays a plain map. */
+function DishPhoto({ uuid, title }: { uuid: string; title: string }) {
+  const blob = useLiveQuery(() => getPhotoBlob(uuid), [uuid], undefined)
+  return <Photo blob={blob} alt={`${title}, as made`} className="h-24 w-24" />
 }
 
 /**

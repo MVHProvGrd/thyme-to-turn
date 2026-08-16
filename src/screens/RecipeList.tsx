@@ -6,10 +6,12 @@ import { SearchField } from '../components/Field'
 import SourceLine from '../components/SourceLine'
 import EmptyState from '../components/EmptyState'
 import Button from '../components/Button'
+import Photo from '../components/Photo'
 import Tile from '../components/Tile'
-import { listCategories, listRecipes } from '../db/repo'
+import { getPhotoBlob, listCategories, listRecipes } from '../db/repo'
 import { hasCategory, sameCategory } from '../lib/categories'
 import { searchRecipes } from '../lib/search'
+import type { Recipe } from '../lib/types'
 
 /**
  * Find a recipe. Rows wrap rather than truncate — her titles run to nine words, and a
@@ -100,21 +102,41 @@ export default function RecipeList() {
           <ul>
             {results.map((recipe) => (
               <li key={recipe.uuid}>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/recipe/${recipe.uuid}`)}
-                  className="flex w-full flex-col items-start gap-[5px] border-b border-rule py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
-                >
-                  <span className="font-serif text-[19px] font-semibold leading-[1.25] text-ink">
-                    {recipe.title}
-                  </span>
-                  <SourceLine citation={recipe.source.citation} page={recipe.source.pageStart} />
-                </button>
+                <Row recipe={recipe} onOpen={() => navigate(`/recipe/${recipe.uuid}`)} />
               </li>
             ))}
           </ul>
         )}
       </div>
     </Screen>
+  )
+}
+
+/**
+ * A row, with the 56×56 slot the design reserves for a dish photo. The blob is only
+ * fetched for recipes that have one, so a hundred text-only rows cost nothing.
+ */
+function Row({ recipe, onOpen }: { recipe: Recipe; onOpen: () => void }) {
+  const thumb = recipe.photos.find((photo) => photo.kind === 'dish') ?? recipe.photos[0]
+  const blob = useLiveQuery(
+    () => (thumb ? getPhotoBlob(thumb.uuid) : Promise.resolve(undefined)),
+    [thumb?.uuid],
+    undefined,
+  )
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 border-b border-rule py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+    >
+      {thumb ? <Photo blob={blob} alt="" className="h-14 w-14" /> : null}
+      <span className="flex min-w-0 flex-col items-start gap-[5px]">
+        <span className="font-serif text-[19px] font-semibold leading-[1.25] text-ink">
+          {recipe.title}
+        </span>
+        <SourceLine citation={recipe.source.citation} page={recipe.source.pageStart} />
+      </span>
+    </button>
   )
 }

@@ -65,15 +65,20 @@ src/seed/       the starter recipes (data + a lazy loader); imports only lib/ ty
 
 ## What exists right now
 
-Phase 1 is done — storage, and typing a recipe in. Phase 2 is done — the dinner screen.
+Phases 1–3 are done: storage and typed entry, the dinner screen, and books + photos.
 
 ```
 lib/        types.ts · ids.ts · ingredients.ts · search.ts · backup-format.ts
-            pantry.ts (matchPantry · nextQuestions · stateFor) · emoji.ts · categories.ts
-platform/   clock.ts · prefs.ts (localStorage prefs + sessionStorage marks) · files.ts · motion.ts
+            pantry.ts (matchPantry · nextQuestions · shortlist · stateFor) · emoji.ts
+            categories.ts · isbn.ts · books.ts
+platform/   clock.ts · prefs.ts (localStorage prefs + sessionStorage marks) · files.ts
+            motion.ts · barcode.ts (the scanner seam) · camera.ts (downscale + crop)
+api/        openlibrary.ts — the only file that talks to Open Library
 db/         schema.ts (v1) · db.ts · repo.ts · backup.ts
 screens/    Dinner (landing) · RecipeList · RecipeDetail (cook mode) · RecipeEdit · Settings
-components/ Screen · TabBar · Button · Field · Toast · SourceLine · EmptyState · Tile · useFlip
+            BookList · BookScan · BookDetail · BookEdit · PhotoCrop
+components/ Screen · TabBar · Button · Field · Toast · SourceLine · EmptyState · Tile
+            useFlip · useObjectUrl · Photo
 seed/       starter.json (100 recipes) · index.ts (loader) · README.md (source, licence)
 scripts/    fetch-starter.mjs — regenerates seed/starter.json from the Wikibooks Cookbook
 ```
@@ -170,6 +175,27 @@ seen the live page.
   email herself beats a zip she has to unpack. Phase 4 wraps the same object in a zip.
 - Import **upserts by uuid** — never appends. The round-trip test
   (`export → wipe → import → import again`) must pass.
+- **Books hang off Recipes, not a fourth tab.** The design is three equal tabs, and the
+  primary way to a book is from a recipe's source line, not a browse. `/books` is reachable
+  from the Recipes header.
+- **Deleting a book never deletes a recipe.** Recipes that pointed at it keep their citation
+  text and lose the `bookUuid` — "p.214" still means something. The confirm says so, because
+  "delete" next to a list of her recipes is otherwise a frightening word.
+- **A recipe stores its book's citation as text AND the uuid.** `repo.saveRecipe` fills the
+  text from the book and `repo.saveBook` refreshes it on every linked recipe, so the source
+  line, search and a backup all read right without a join and survive the book being deleted.
+- **One lookup per book, ever.** `api/openlibrary.ts` is the only caller; the answer lives in
+  the `books` table from then on. Covers are downloaded to blobs, never hot-linked, so the
+  shelf works offline. Browsers forbid setting `User-Agent`, so the polite behaviour Open
+  Library asks for is simply the caching.
+- **Every object URL is revoked** (`useObjectUrl`). A list of covers or thumbnails that mints
+  them and never releases them leaks until iOS kills the tab.
+- **Photos: dish crops destructively, page photos never do.** `repo.replacePhotoBytes`
+  throws on a `page` photo. A dish photo is hers and a bad crop is fixable by taking another;
+  a page photo is the only record of what page 214 said when a parse turns out wrong, so it
+  gets a `crop` rect and keeps its pixels. Everything is downscaled to 2000px/q0.85 by
+  `platform/camera.ts` BEFORE it is stored — don't lower it, that resolution is what makes a
+  fraction glyph legible when the photo is the only source of truth left.
 - **Categories are `tags`.** `Recipe.tags` has existed and been indexed (`*tags`) since
   v1 and was already in the search haystack, so categories shipped with **no migration and
   no new field on the recipe**. The vocabulary (presets + whatever she invents) is

@@ -9,6 +9,7 @@ import BookList from './screens/BookList'
 import BookDetail from './screens/BookDetail'
 import BookEdit from './screens/BookEdit'
 import BookScan from './screens/BookScan'
+import PhotoCrop from './screens/PhotoCrop'
 
 /**
  * The route table. New screens are registered HERE, in one place, plus a nav entry in
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/recipe/:uuid" element={<RecipeDetail />} />
           <Route path="/edit" element={<RecipeEdit />} />
           <Route path="/edit/:uuid" element={<RecipeEdit />} />
+          <Route path="/recipe/:uuid/photo/:photoUuid/crop" element={<PhotoCrop />} />
           <Route path="/books" element={<BookList />} />
           <Route path="/books/scan" element={<BookScan />} />
           <Route path="/books/new" element={<BookEdit />} />

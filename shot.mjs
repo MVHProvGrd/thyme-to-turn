@@ -3,10 +3,67 @@
 // Run: node shot.mjs   (needs `npm run preview` on 4173)
 import { chromium } from 'playwright'
 import { existsSync, mkdirSync } from 'node:fs'
+import { deflateSync } from 'node:zlib'
 
 const BASE = 'http://127.0.0.1:4173/thyme-to-turn/'
 const OUT = 'shots'
 mkdirSync(OUT, { recursive: true })
+
+/**
+ * A real PNG, drawn here rather than committed as a fixture: the photo pipeline decodes,
+ * downscales and re-encodes, so it needs actual pixels. Coloured bands make it obvious in
+ * a screenshot which part of the picture the crop kept.
+ */
+function testPng(width = 480, height = 320) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    return c >>> 0
+  })
+  const crc32 = (buf) => {
+    let c = 0xffffffff
+    for (const byte of buf) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8)
+    return (c ^ 0xffffffff) >>> 0
+  }
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4)
+    len.writeUInt32BE(data.length)
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data])
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(body))
+    return Buffer.concat([len, body, crc])
+  }
+
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 8 // bit depth
+  ihdr[9] = 2 // truecolour RGB
+  const raw = Buffer.alloc(height * (width * 3 + 1))
+  let at = 0
+  for (let y = 0; y < height; y += 1) {
+    raw[at] = 0 // no per-row filter
+    at += 1
+    for (let x = 0; x < width; x += 1) {
+      const band = Math.floor((y / height) * 4)
+      raw[at] = [0xc9, 0x7f, 0x2f, 0x1f][band] // R
+      raw[at + 1] = [0x6b, 0xb0, 0x53, 0x2a][band] // G
+      raw[at + 2] = [0x32, 0x3f, 0x20, 0x16][band] // B
+      if (x % 60 < 4) {
+        raw[at] = 0xf6
+        raw[at + 1] = 0xf3
+        raw[at + 2] = 0xe9
+      }
+      at += 3
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
+}
 
 const RECIPES = [
   {
@@ -318,6 +375,39 @@ await page.getByLabel('Where it lives').fill('Kitchen drawer')
 await page.screenshot({ path: `${OUT}/27-book-edit.png` })
 await page.getByRole('button', { name: 'Save' }).click()
 await page.waitForURL(/#\/book\//)
+
+/* --------------------------------------------------------------- dish photos */
+
+// A photo of what she actually made. Downscaled to 2000px before it is ever stored.
+await page.goto(`${BASE}#/recipes`)
+await page.getByLabel('Search recipes').fill('Lentil soup')
+await page.getByText('Lentil soup', { exact: true }).click()
+await page.waitForSelector('text=Photos of it')
+await page.getByRole('button', { name: 'Add a photo' }).click()
+await page.locator('input[type=file]').setInputFiles({
+  name: 'dinner.png',
+  mimeType: 'image/png',
+  buffer: testPng(),
+})
+await page.getByRole('button', { name: /Crop this photo/ }).waitFor()
+await page.waitForTimeout(300)
+await page.screenshot({ path: `${OUT}/28-recipe-photo.png` })
+
+// Crop is destructive for a DISH photo — hers, so her call. Page photos refuse.
+await page.getByRole('button', { name: /Crop this photo/ }).click()
+await page.waitForSelector('text=Drag the picture to move it')
+await page.locator('input[type=range]').fill('1.8')
+await page.waitForTimeout(200)
+await page.screenshot({ path: `${OUT}/29-photo-crop.png` })
+await page.getByRole('button', { name: 'Save' }).click()
+await page.waitForURL(/#\/recipe\//)
+await page.waitForTimeout(2400) // let the toast clear
+
+// And the list stops being a wall of text.
+await page.goto(`${BASE}#/recipes`)
+await page.getByLabel('Search recipes').fill('Lentil')
+await page.waitForTimeout(300)
+await page.screenshot({ path: `${OUT}/30-list-thumbnail.png` })
 
 console.log('shots written')
 await browser.close()

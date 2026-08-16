@@ -6,7 +6,7 @@ import Button from '../components/Button'
 import { Input, Label, Textarea } from '../components/Field'
 import { useToast } from '../components/Toast'
 import Tile from '../components/Tile'
-import { deleteRecipe, getRecipe, listCategories, saveRecipe } from '../db/repo'
+import { deleteRecipe, getRecipe, listBooks, listCategories, saveRecipe } from '../db/repo'
 import { hasCategory, sameCategory, toggleCategory } from '../lib/categories'
 import type { Recipe } from '../lib/types'
 
@@ -44,7 +44,10 @@ export default function RecipeEdit() {
   const [method, setMethod] = useState('')
   const [notes, setNotes] = useState('')
   const [tags, setTags] = useState<string[]>([])
+  const [bookUuid, setBookUuid] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const books = useLiveQuery(listBooks, [], undefined)
 
   const categories = useLiveQuery(listCategories, [], undefined)
   /** The vocabulary, plus any tag this recipe already carries that has left the list. */
@@ -65,6 +68,7 @@ export default function RecipeEdit() {
       setExisting(recipe)
       setTitle(recipe.title)
       setCitation(recipe.source.citation ?? '')
+      setBookUuid(recipe.source.bookUuid ?? '')
       setPage(recipe.source.pageStart ? String(recipe.source.pageStart) : '')
       const flat = recipe.ingredients.flatMap((group) => group.items)
       setLines(
@@ -96,8 +100,11 @@ export default function RecipeEdit() {
         uuid: existing?.uuid,
         title,
         source: {
-          kind: citation.trim() ? 'book' : 'other',
-          ...(citation.trim() ? { citation: citation.trim() } : {}),
+          // A picked book wins: repo.saveRecipe fills the citation text from the book
+          // itself and keeps it in step if she later corrects the title.
+          kind: bookUuid || citation.trim() ? 'book' : 'other',
+          ...(bookUuid ? { bookUuid } : {}),
+          ...(!bookUuid && citation.trim() ? { citation: citation.trim() } : {}),
           ...(Number(page) > 0 ? { pageStart: Number(page) } : {}),
         },
         ingredients: [
@@ -164,13 +171,47 @@ export default function RecipeEdit() {
           placeholder="Roast chicken with fennel"
         />
 
+        {books && books.length > 0 ? (
+          <div className="flex flex-col gap-[6px]">
+            <label
+              htmlFor="book"
+              className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft"
+            >
+              From one of your books
+            </label>
+            {/* A select, not chips: book titles run long and chips truncate at 14 characters. */}
+            <select
+              id="book"
+              value={bookUuid}
+              onChange={(event) => setBookUuid(event.target.value)}
+              className="min-h-[48px] w-full rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+            >
+              <option value="">— not from a book on the shelf —</option>
+              {books.map((book) => (
+                <option key={book.uuid} value={book.uuid}>
+                  {book.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-[1fr_88px] gap-[10px]">
-          <Input
-            label="Book"
-            value={citation}
-            onChange={(event) => setCitation(event.target.value)}
-            placeholder="The Zuni Café Cookbook"
-          />
+          {bookUuid ? (
+            <div className="flex flex-col gap-[6px]">
+              <Label>Book</Label>
+              <p className="flex min-h-[48px] items-center rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink-soft">
+                {books?.find((book) => book.uuid === bookUuid)?.title ?? ''}
+              </p>
+            </div>
+          ) : (
+            <Input
+              label="Book"
+              value={citation}
+              onChange={(event) => setCitation(event.target.value)}
+              placeholder="The Zuni Café Cookbook"
+            />
+          )}
           <Input
             label="Page"
             inputMode="numeric"
