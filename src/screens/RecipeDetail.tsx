@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import Screen from '../components/Screen'
 import Button from '../components/Button'
 import SourceLine from '../components/SourceLine'
@@ -17,6 +17,10 @@ import { readPref, writePref } from '../platform/prefs'
 export default function RecipeDetail() {
   const { uuid = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  // Back returns to wherever she came from — the dinner screen or the list. A card on
+  // the dinner screen passes `{ from: '/dinner' }`; anything else lands on the list.
+  const from = (location.state as { from?: string } | null)?.from ?? '/recipes'
   const recipe = useLiveQuery(() => getRecipe(uuid), [uuid], undefined)
 
   const [cook, setCook] = useState(() => readPref('cookMode', false))
@@ -58,7 +62,7 @@ export default function RecipeDetail() {
         <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-[18px]">
           <button
             type="button"
-            onClick={() => navigate('/recipes')}
+            onClick={() => navigate(from)}
             className="min-h-[44px] font-mono text-xs text-ink-soft"
           >
             ← Back

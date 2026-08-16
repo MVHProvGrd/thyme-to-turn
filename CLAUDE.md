@@ -64,20 +64,20 @@ src/components/ shared presentational pieces; no db/api/platform imports
 
 ## What exists right now
 
-Phase 1 is done — storage, and typing a recipe in.
+Phase 1 is done — storage, and typing a recipe in. Phase 2 is done — the dinner screen.
 
 ```
 lib/        types.ts · ids.ts · ingredients.ts · search.ts · backup-format.ts
-platform/   clock.ts · prefs.ts · files.ts
+            pantry.ts (matchPantry · nextQuestions · cycleState) · emoji.ts
+platform/   clock.ts · prefs.ts (localStorage prefs + sessionStorage marks) · files.ts · motion.ts
 db/         schema.ts (v1) · db.ts · repo.ts · backup.ts
-screens/    RecipeList · RecipeDetail (cook mode) · RecipeEdit · Settings
-components/ Screen · TabBar · Button · Field · Toast · SourceLine · EmptyState
+screens/    Dinner (landing) · RecipeList · RecipeDetail (cook mode) · RecipeEdit · Settings
+components/ Screen · TabBar · Button · Field · Toast · SourceLine · EmptyState · Tile · useFlip
 ```
 
-Phase 2 is the dinner screen: `lib/pantry.ts`, the tri-state `Tile`, and a `/dinner` route
-that becomes the landing screen and the third tab. The design for it is in `docs/design/`
-— `HANDOFF.md` is the build spec, `designspec.md` is the intent, and `README.md` lists
-where this build knowingly differs and why.
+`/dinner` is the landing route and the first of three tabs. The design for it is in
+`docs/design/` — `HANDOFF.md` is the build spec, `designspec.md` is the intent, and
+`README.md` lists where this build knowingly differs and why.
 
 Conventions worth keeping:
 
@@ -112,9 +112,14 @@ Headless Chromium is preinstalled at `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`
 Do **not** run `playwright install`. Drive the real app, screenshot it, and read the
 screenshot back with the Read tool — don't declare a UI change done from the diff alone.
 
-`shot.mjs` in the repo root does this: it types three recipes in through the real form at
-390×844, then shoots the list, edit, detail, cook mode, settings and a post-reload check.
-Extend it when a screen lands. Output goes to `shots/`, which is gitignored.
+`shot.mjs` in the repo root does this: it types four recipes in through the real form at
+390×844, then shoots the list, edit, detail, cook mode, settings, a post-reload check, and
+the dinner screen — cold start, three things tapped out, the card with both `missing` and
+`not sure`, the `+` flip, everything ruled out, "only what I listed", and staples in
+Settings. Extend it when a screen lands. Output goes to `shots/`, which is gitignored.
+
+On a laptop without the sandbox Chromium, `shot.mjs` falls back to the installed Google
+Chrome (`channel: 'chrome'`). Still never `playwright install`.
 
 Chromium in this sandbox **cannot reach the live github.io URL** (`ERR_CONNECTION_RESET`)
 even though `curl` can. Verify the deployed site with `curl` for status codes and the
@@ -171,38 +176,55 @@ before calling.
 The point of the app. Two ways in, one engine:
 
 - **Two filters, both live at once — no mode toggle.** Every ingredient is
-  `have` / `dontHave` / `unknown` for the session. Typing sets `have`; tapping a tile
-  cycles `dontHave → have → unknown`. Do NOT build two screens, two match functions, or a
-  direction picker.
+  `have` / `dontHave` / `unknown` for the session. Tapping a tile cycles
+  `unknown → dontHave → have → unknown` (`dontHave` first — ruling out is the primary
+  gesture); the `+` on a card's missing chip sets `have`. The text field only filters the
+  tile grid — it never searches recipes and never sets a mark by itself. Do NOT build two
+  screens, two match functions, or a direction picker.
 - **`unknown` means unknown.** Never score an unmarked ingredient as missing. `dontHave`
   is reliable *and* complete (she knows what she's out of); `have` is reliable but
   *incomplete* (three typed items ≠ an empty kitchen). Conflating them is the bug that
   makes the screen untrustworthy.
-- **Two counts per recipe, never one:** `missing` (ruled out — hard) and `unsure`
-  (unmentioned — soft). Sort by `missing`, then `unsure`. Show them differently on the
-  card: `missing: cream` vs `not sure: shallots, thyme`. **A `have` mark must never
-  increase any recipe's `missing` count** — that's the regression test.
-- `onlyWhatIListed` is a **checkbox** that collapses `unsure` into `missing`, for the
-  bare-cupboard case. Not a mode.
+- **Two counts per recipe, never one:** `missing` (ruled out — hard) and `notSure`
+  (unmentioned — soft). Sort by `missing`, then `notSure`, then coverage, then title. Show
+  them differently on the card: `missing: cream` vs `not sure: shallots, thyme` — those two
+  words never get synonyms anywhere in the product. **A `have` mark must never increase
+  any recipe's `missing` count** — that's the regression test in `pantry.test.ts`.
+- `onlyWhatIListed` is a **checkbox** that collapses `notSure` into `missing`, for the
+  bare-cupboard case. Not a mode. Under it every recipe stays a live candidate for the
+  question grid (each is one `have` at a time from rescue), otherwise the grid would go
+  dead at cold start.
 - **Tap-out grid is the primary surface.** Recall ("what's in my fridge") is hard and
   incomplete; recognition ("do you have parmesan?") is easy. She's out of three things and
   has forty.
-- **Grid order is information gain**, not alphabetical: offer the ingredient appearing in
-  closest to half the remaining candidates, so each tap halves the field. Never offer a
-  staple, an already-answered ingredient, or one no live recipe uses.
+- **Grid order is information gain**, not alphabetical: answered tiles first (in the order
+  she tapped them), then `nextQuestions()` — the ingredients appearing in closest to half
+  the live candidates (recipes 0–1 away), so each tap halves the field. Never a staple, an
+  already-answered ingredient, or one no live recipe uses. Twelve questions at a time;
+  typing in the field searches the whole non-staple registry instead.
 - **Session state only.** "Don't have chicken" and "not chicken tonight" are
   indistinguishable and, for narrowing, identical — so these taps are not facts about her
-  kitchen and are never written into a standing pantry (D12).
+  kitchen and are never written into a standing pantry (D12). They live in
+  **sessionStorage** (`platform/prefs.ts` `readSession`/`writeSession`), keyed by registry
+  uuid: they survive opening a recipe and a mid-cooking reload, and die with the tab.
+  Never move them to localStorage or IndexedDB.
 - **No image pipeline for tiles.** Emoji where coverage is confident, a typographic tile
   otherwise. Generated ingredient art is not a v1 conversation.
 - **Rank, never filter.** Three groups — ready now / one thing away / two things away —
   with the missing items named on each card. A strict filter returns nothing most nights.
 - **Subtract staples before matching** — the `isStaple` flag on each registry entry.
-  Without this every recipe reads as infeasible and the screen is always empty. Keep the
-  flags visible and editable; wrong staples produce confidently wrong answers.
+  Without this every recipe reads as infeasible and the screen is always empty. The flags
+  are visible and editable in Settings (the same `Tile`, `unknown`/`have` only, via
+  `repo.setStaple`); wrong staples produce confidently wrong answers. A staple is never
+  offered on the dinner grid — "I'm out of butter tonight" is a Settings change for now
+  (see ROADMAP).
 - **Skip `optional: true` ingredients.** Garnishes don't block feasibility.
 - **A recipe with unresolved ingredient IDs is excluded from "ready to cook"** — never
-  assumed feasible. Silence beats a confident wrong answer.
+  assumed feasible. Silence beats a confident wrong answer. (`matchPantry` drops it from
+  the results entirely; it still counts in the "N recipes" tally.)
+- **The re-rank is the only animation in the app**: `components/useFlip.ts` slides result
+  cards ~180ms with the Web Animations API, keyed by `data-flip-key`, and is switched off
+  by `platform/motion.ts` `prefersReducedMotion()`. Nothing else moves.
 - **An ingredient registry, not a taxonomy.** The `ingredients` table holds one row per
   canonical ingredient — our `uuid`, canonical name, aliases, `isStaple` — and recipes
   store those **uuids** in `ingredientIndex`, never strings. `repo.ts` reconciles each

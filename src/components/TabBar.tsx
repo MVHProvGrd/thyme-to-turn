@@ -4,10 +4,10 @@ import { NavLink } from 'react-router-dom'
  * Top-level navigation. Adding a screen means adding a <Route> in App.tsx and an entry
  * here — two known places beats a screen that exists but can't be reached.
  *
- * The Dinner tab lands in phase 2 with the screen it points at. A tab that leads to
- * "nothing here yet" is worse than a tab bar that grows by one.
+ * Three equal tabs, Dinner first — it's the landing screen and the product.
  */
 export const TABS = [
+  { to: '/dinner', label: 'Dinner', match: ['/dinner'] },
   { to: '/recipes', label: 'Recipes', match: ['/recipes', '/recipe', '/edit'] },
   { to: '/settings', label: 'Settings', match: ['/settings'] },
 ]

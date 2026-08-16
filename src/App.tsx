@@ -4,6 +4,7 @@ import RecipeList from './screens/RecipeList'
 import RecipeDetail from './screens/RecipeDetail'
 import RecipeEdit from './screens/RecipeEdit'
 import Settings from './screens/Settings'
+import Dinner from './screens/Dinner'
 
 /**
  * The route table. New screens are registered HERE, in one place, plus a nav entry in
@@ -12,20 +13,21 @@ import Settings from './screens/Settings'
  * HashRouter, not BrowserRouter: GitHub Pages serves static files with no rewrite rules,
  * so a hard refresh on /recipe/abc123 would 404. Ugly URL, zero deploy config.
  *
- * Phase 2 adds /dinner and makes it the landing route — it's the product.
+ * /dinner is the landing route — it's the product. Everything else feeds it.
  */
 export default function App() {
   return (
     <ToastProvider>
       <HashRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/recipes" replace />} />
+          <Route path="/" element={<Navigate to="/dinner" replace />} />
+          <Route path="/dinner" element={<Dinner />} />
           <Route path="/recipes" element={<RecipeList />} />
           <Route path="/recipe/:uuid" element={<RecipeDetail />} />
           <Route path="/edit" element={<RecipeEdit />} />
           <Route path="/edit/:uuid" element={<RecipeEdit />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/recipes" replace />} />
+          <Route path="*" element={<Navigate to="/dinner" replace />} />
         </Routes>
       </HashRouter>
     </ToastProvider>

@@ -44,7 +44,7 @@ export function ScreenHeader({
         </h1>
         {action}
       </div>
-      {sub ? <p className="mt-1 font-mono text-xs text-ink-soft">{sub}</p> : null}
+      {sub ? <p className="mt-2 font-mono text-xs text-ink-soft">{sub}</p> : null}
     </div>
   )
 }
