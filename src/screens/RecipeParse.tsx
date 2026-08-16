@@ -6,8 +6,11 @@ import Photo from '../components/Photo'
 import { useToast } from '../components/Toast'
 import { ParseError, parseRecipePhotos } from '../api/claude'
 import { hasApiKey } from '../api/key'
+import { BRING_YOUR_OWN_AI_PROMPT } from '../api/prompts'
 import { savePhoto, saveRecipe } from '../db/repo'
+import { PastedParseError, readPastedParse } from '../lib/pasted-parse'
 import { prepareImage } from '../platform/camera'
+import { copyText } from '../platform/clipboard'
 
 /**
  * Photograph a page, get a filled-in form.
@@ -35,6 +38,28 @@ export default function RecipeParse() {
   const [shots, setShots] = useState<Shot[]>([])
   const [working, setWorking] = useState<string | null>(null)
   const [error, setError] = useState<ParseError | null>(null)
+  const [pasted, setPasted] = useState('')
+  const [pasteError, setPasteError] = useState<string | null>(null)
+
+  /**
+   * The bring-your-own-AI path. She uses whichever assistant she already pays for, and the
+   * answer lands in exactly the same verification gate — no key, no per-recipe cost, and
+   * still nothing written until she presses Save.
+   */
+  async function usePasted() {
+    setPasteError(null)
+    try {
+      const parsed = readPastedParse(pasted)
+      const photos = shots.length
+        ? await Promise.all(
+            shots.map((shot) => savePhoto(shot.blob, 'page', { width: shot.width, height: shot.height })),
+          )
+        : []
+      navigate('/edit', { state: { parsed, photos } })
+    } catch (caught) {
+      setPasteError(caught instanceof PastedParseError ? caught.message : "That didn't read as a recipe.")
+    }
+  }
 
   async function addFiles(files: File[]) {
     setError(null)
@@ -181,6 +206,48 @@ export default function RecipeParse() {
             </Button>
           </>
         ) : null}
+
+        <section className="flex flex-col gap-2 rounded-sm border border-rule border-l-2 border-l-leaf bg-card px-[14px] py-[13px]">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
+            Or use any AI you already have
+          </h2>
+          <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+            No key needed, and nothing to pay per recipe. Copy the instructions, open whichever
+            assistant you use, give it your photo of the page, then paste its reply back here.
+            You still check everything before it saves.
+          </p>
+          <Button
+            variant="secondary"
+            className="self-start"
+            onClick={() =>
+              void copyText(BRING_YOUR_OWN_AI_PROMPT).then((ok) =>
+                toast(ok ? 'Instructions copied.' : "Couldn't copy — select the text by hand."),
+              )
+            }
+          >
+            Copy the instructions
+          </Button>
+          <label className="mt-1 flex flex-col gap-[6px]">
+            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft">
+              Paste the reply
+            </span>
+            <textarea
+              value={pasted}
+              onChange={(event) => setPasted(event.target.value)}
+              rows={4}
+              placeholder='{ "title": "…", "ingredients": [ … ] }'
+              className="w-full rounded-sm border border-rule bg-paper px-3 py-2 font-mono text-[12px] leading-[1.5] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+            />
+          </label>
+          {pasted.trim() ? (
+            <Button className="self-start" onClick={() => void usePasted()}>
+              Check what it read
+            </Button>
+          ) : null}
+          {pasteError ? (
+            <p className="font-mono text-[11px] leading-[1.6] text-copper">{pasteError}</p>
+          ) : null}
+        </section>
 
         {error ? (
           <div className="flex flex-col gap-2 rounded-sm border border-copper/45 px-[14px] py-[13px]">

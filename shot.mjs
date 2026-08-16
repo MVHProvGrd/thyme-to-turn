@@ -477,5 +477,49 @@ if (gated > 0) {
   console.log('note: could not stage the parse state in-browser; gate covered by unit tests')
 }
 
+/* ------------------------------------------- bring your own AI (no key needed) */
+
+// The path that needs no API key at all: she pastes a reply from whatever assistant she
+// already uses. Deliberately messy input — code fences and chatter around the JSON — so
+// this proves the forgiving reader, and it exercises the verification gate for real.
+await page.goto(`${BASE}#/parse`)
+await page.waitForSelector('text=Or use any AI you already have')
+await page.screenshot({ path: `${OUT}/35-parse-any-ai.png` })
+
+const REPLY = [
+  'Sure — here is the recipe from your photo:',
+  '```json',
+  JSON.stringify(
+    {
+      title: 'Braised fennel with cream',
+      yield: 'Serves 4',
+      ingredients: [
+        '3 bulbs fennel, halved',
+        '300 ml double cream',
+        '60 g parmesan, grated',
+        'thyme, to serve',
+      ],
+      method: '1. Braise the fennel until a knife slides through.\n2. Pour over the cream and bake.',
+      lowConfidenceFields: ['ingredients.1'],
+    },
+    null,
+    2,
+  ),
+  '```',
+  'Let me know if you want it scaled up!',
+].join('\n')
+
+await page.getByLabel('Paste the reply').fill(REPLY)
+await page.getByRole('button', { name: 'Check what it read' }).click()
+await page.waitForSelector('text=Nothing is saved yet')
+await page.waitForTimeout(300)
+await page.screenshot({ path: `${OUT}/36-any-ai-gate.png` })
+
+// It is still only a suggestion until she says so — Save is what writes it.
+await page.getByRole('button', { name: 'Save' }).click()
+await page.waitForURL(/#\/recipe\//)
+await page.waitForTimeout(2400)
+await page.screenshot({ path: `${OUT}/37-any-ai-saved.png` })
+
 console.log('shots written')
 await browser.close()

@@ -50,6 +50,43 @@ REPORT YOUR OWN DOUBT.
 - Guessing silently is the one unrecoverable mistake. Flagging is free.`
 
 /**
+ * The same instructions, for pasting into whatever assistant she already uses.
+ *
+ * A chat window has no structured-output mode, so the shape has to be asked for in words
+ * and the answer read forgivingly at the other end (`lib/pasted-parse.ts`). Everything
+ * else is identical, including the rules about transcribing rather than improving and
+ * leaving the headnote alone — the path in is different, the discipline is not.
+ */
+export const BRING_YOUR_OWN_AI_PROMPT = `${RECIPE_SYSTEM_PROMPT}
+
+Reply with ONLY this JSON object. No explanation before it, no summary after it:
+
+{
+  "notARecipe": false,
+  "title": "the recipe's title, or null",
+  "yield": "as printed, e.g. Serves 4, or null",
+  "times": { "prepMinutes": null, "cookMinutes": null, "totalMinutes": null },
+  "ingredients": [
+    {
+      "heading": "the printed group heading, or null",
+      "items": [
+        {
+          "raw": "the line exactly as printed",
+          "quantity": 1.5,
+          "unit": "cup",
+          "item": "all-purpose flour",
+          "canonical": "flour",
+          "note": "sifted",
+          "optional": false
+        }
+      ]
+    }
+  ],
+  "steps": ["one step per entry, in the page's own words"],
+  "lowConfidenceFields": ["dotted paths you could not read cleanly"]
+}`
+
+/**
  * Structured Outputs schema (D7). The response is guaranteed to match this, so nothing
  * downstream parses text or retries on malformed JSON.
  *
