@@ -149,9 +149,13 @@ export default function Dinner() {
   }
 
   const count = recipes.length
-  // Say why the list got shorter, rather than quietly showing 12 where there were 104.
+  // Say why the list got shorter, and how well it matched — quietly showing 6 where there
+  // were 104 is the kind of silence that reads as a bug.
+  const picked = Object.values(marks).filter((state) => state === 'have').length
+  const using = shown.length > 0 ? shown[0].matched : 0
+  const noun = shown.length === 1 ? 'recipe uses' : 'recipes use'
   const tally = narrowed
-    ? `${shown.length} of ${count} use what you have · ${ready.length} ready · ${ruledOut} ruled out`
+    ? `${shown.length} ${noun} ${using === picked ? `all ${picked}` : `${using} of your ${picked}`} · ${ready.length} ready · ${ruledOut} ruled out`
     : `${count} ${count === 1 ? 'recipe' : 'recipes'} · ${ready.length} ready · ${ruledOut} ruled out`
 
   function openRecipe(uuid: string) {

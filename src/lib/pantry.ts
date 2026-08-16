@@ -30,6 +30,13 @@ export type Match = {
   recipe: Recipe
   /** Canonical names she said she HAS. What the recipe makes use of. */
   confirmed: string[]
+  /**
+   * How many of HER MARKS this recipe uses — not how many of its lines matched. One mark
+   * can confirm several lines through the prefix rule (a pantry `beef` covers `beef` and
+   * `ground beef`), so `confirmed.length` overcounts her picks and reported "uses 4 of
+   * your 3". This is the number the filter and the tally use.
+   */
+  matched: number
   /** Canonical names she ruled out. Hard — she told us. */
   missing: string[]
   /** Canonical names she never mentioned. Soft — she has forty things in that kitchen. */
@@ -62,16 +69,18 @@ type Mark = { entry: IngredientEntry; state: 'have' | 'dontHave'; names: string[
  *
  * Within a tier a `dontHave` beats a `have`: "I'm out of it" is the hard fact.
  */
+type Resolution = { state: IngredientState; via?: string }
+
 function resolveState(
   entry: IngredientEntry,
   states: Record<string, IngredientState>,
   marks: Mark[],
-): IngredientState {
+): Resolution {
   const direct = states[entry.uuid]
-  if (isMarked(direct)) return direct
+  if (isMarked(direct)) return { state: direct, via: entry.uuid }
 
   const names = namesOf(entry)
-  let best: { tier: number; specificity: number; state: 'have' | 'dontHave' } | undefined
+  let best: { tier: number; specificity: number; state: 'have' | 'dontHave'; via: string } | undefined
 
   for (const mark of marks) {
     if (mark.entry.uuid === entry.uuid) continue
@@ -93,10 +102,10 @@ function resolveState(
       tier > best.tier ||
       (tier === best.tier && specificity > best.specificity) ||
       (tier === best.tier && specificity === best.specificity && mark.state === 'dontHave')
-    if (better) best = { tier, specificity, state: mark.state }
+    if (better) best = { tier, specificity, state: mark.state, via: mark.entry.uuid }
   }
 
-  return best?.state ?? 'unknown'
+  return best ? { state: best.state, via: best.via } : { state: 'unknown' }
 }
 
 /**
@@ -109,7 +118,7 @@ export function stateFor(
   states: Record<string, IngredientState>,
   registry: IngredientEntry[],
 ): IngredientState {
-  return resolveState(entry, states, collectMarks(states, registry))
+  return resolveState(entry, states, collectMarks(states, registry)).state
 }
 
 function collectMarks(states: Record<string, IngredientState>, registry: IngredientEntry[]): Mark[] {
@@ -175,6 +184,9 @@ export function matchPantry(
     const confirmed: string[] = []
     const missing: string[] = []
     const notSure: string[] = []
+    // Which of HER marks this recipe actually uses, deduped — one mark reaching two
+    // ingredients by prefix is still one thing she picked.
+    const satisfied = new Set<string>()
     let unresolved = false
 
     for (const uuid of recipe.ingredientIndex) {
@@ -186,9 +198,11 @@ export function matchPantry(
       if (entry.isStaple) continue
       if (namesOf(entry).some((n) => skip.has(n))) continue
 
-      const state = resolveState(entry, states, marks)
-      if (state === 'have') confirmed.push(entry.canonical)
-      else if (state === 'dontHave') missing.push(entry.canonical)
+      const { state, via } = resolveState(entry, states, marks)
+      if (state === 'have') {
+        confirmed.push(entry.canonical)
+        if (via) satisfied.add(via)
+      } else if (state === 'dontHave') missing.push(entry.canonical)
       else notSure.push(entry.canonical)
     }
     if (unresolved) continue
@@ -196,13 +210,13 @@ export function matchPantry(
     const required = confirmed.length + missing.length + notSure.length
     const coverage = required === 0 ? 1 : confirmed.length / required
 
-    matches.push({ recipe, confirmed, missing, notSure, coverage })
+    matches.push({ recipe, confirmed, matched: satisfied.size, missing, notSure, coverage })
   }
 
   matches.sort(
     (a, b) =>
       a.missing.length - b.missing.length ||
-      b.confirmed.length - a.confirmed.length ||
+      b.matched - a.matched ||
       a.notSure.length - b.notSure.length ||
       a.recipe.title.localeCompare(b.recipe.title),
   )
@@ -210,28 +224,36 @@ export function matchPantry(
 }
 
 /**
- * Once she has said she HAS something, show only the recipes that use it.
+ * Once she has said she HAS something, show only the recipes that use it — and when she
+ * has said three things, only the recipes that use all three.
  *
- * This is a deliberate exception to "rank, never filter", added because she asked twice
- * (Alisa, 2026-08-16): marking beef, onion and carrot and still being shown all 104
- * recipes under READY TO COOK made the marks feel decorative. "The whole point is to show
- * me recipes WITH what I select."
- *
- * The two directions are NOT symmetric, which is why only this one filters:
+ * A deliberate exception to "rank, never filter". The two directions are NOT symmetric,
+ * which is why only this one filters:
  *
  *   dontHave  ruling things out is elimination. Filtering on it returns nothing most
  *             nights — that is the original "rank, never filter" argument, and it stands.
- *   have      saying what she has is a statement of INTENT: show me what uses this. It
- *             cannot empty the screen, because every recipe it hides is one that uses
- *             none of what she picked.
+ *   have      saying what she has is a statement of INTENT: show me what uses this.
  *
- * Self-limiting on purpose: if nothing she marked appears in any recipe, no match has a
- * confirmed ingredient and everything is returned rather than nothing. Marking something
- * obscure narrows the list; it never blanks it.
+ * ANY vs ALL, which took two goes to get right (Alisa, 2026-08-16). The first version kept
+ * every recipe using *any* confirmed ingredient, and she did the arithmetic: beef was in
+ * 16 recipes, onion in 36, both together showed 40, and adding carrot took it to 42. A
+ * union GROWS as she says more, which is backwards — every tap is supposed to halve the
+ * field, not widen it. "Shouldn't all 3 selected show ONLY the recipes that have all 3?"
+ * Yes. So the bar is the best match available, not one match:
+ *
+ *   she marks 3 and some recipe uses all 3  → only those recipes
+ *   she marks 3 and nothing uses more than 2 → the 2-of-3 recipes, rather than nothing
+ *
+ * That fallback is what keeps a strict AND honest. Plain intersection would blank the
+ * screen the moment she marked a fourth thing no single recipe happens to combine, and an
+ * empty screen is the failure this whole file exists to avoid. Adding a mark can now only
+ * narrow the list or leave it alone — never widen it.
  */
 export function shortlist(matches: Match[]): Match[] {
-  const anyConfirmed = matches.some((match) => match.confirmed.length > 0)
-  return anyConfirmed ? matches.filter((match) => match.confirmed.length > 0) : matches
+  let best = 0
+  for (const match of matches) best = Math.max(best, match.matched)
+  if (best === 0) return matches
+  return matches.filter((match) => match.matched === best)
 }
 
 /**

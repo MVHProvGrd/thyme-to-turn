@@ -122,6 +122,16 @@ describe('matchPantry: what counts as required', () => {
     expect(matches.map((m) => m.recipe.title)).toEqual(['Lentil soup'])
   })
 
+  it('counts HER marks, not matching lines — one mark reaching two ingredients is one', () => {
+    // A pantry `chicken` confirms both `chicken` and `chicken thigh` by the prefix rule.
+    // Counting lines made the tally say "uses 4 of your 3"; it is her picks that count.
+    const registry = [entry('chicken'), entry('chicken thigh'), entry('rice')]
+    const both = recipe('Chicken two ways', ['chicken', 'chicken thigh', 'rice'], registry)
+    const [m] = matchPantry([both], { 'id:chicken': 'have' }, registry)
+    expect(m.confirmed).toEqual(['chicken', 'chicken thigh'])
+    expect(m.matched).toBe(1)
+  })
+
   it('ranks by what she HAS, not by what is simplest — the beef-stew case', () => {
     // Alisa, 2026-08-16: marking beef/onion/carrot left a five-line chicken recipe on top,
     // because "fewest unknowns" is "simplest recipe" and her marks did nothing visible.
@@ -137,7 +147,9 @@ describe('matchPantry: what counts as required', () => {
     const ranked = matchPantry([roast, stew], marks, registry)
     expect(ranked.map((m) => m.recipe.title)).toEqual(['Beef stew', 'Roast chicken'])
     expect(ranked[0].confirmed).toEqual(['beef', 'onion', 'carrot'])
+    expect(ranked[0].matched).toBe(3)
     expect(ranked[1].confirmed).toEqual([])
+    expect(ranked[1].matched).toBe(0)
     // The simplest recipe still wins when she has said nothing — the cold-start default.
     expect(matchPantry([roast, stew], {}, registry).map((m) => m.recipe.title)).toEqual([
       'Roast chicken',
@@ -276,6 +288,23 @@ describe('shortlist: once she says she HAS something, show what uses it', () => 
       'Spaghetti with anchovies',
     ])
     expect(shown.every((m) => m.confirmed.includes('garlic'))).toBe(true)
+  })
+
+  it('marks two things: only recipes that use BOTH — a second mark must never widen', () => {
+    const one = shortlist(matchPantry(RECIPES, states({ garlic: 'have' }), REGISTRY))
+    const two = shortlist(matchPantry(RECIPES, states({ garlic: 'have', onion: 'have' }), REGISTRY))
+    expect(two.map((m) => m.recipe.title)).toEqual(['Chickpea stew', 'Lentil soup'])
+    expect(two.every((m) => m.matched === 2)).toBe(true)
+    // The whole point of the AND: saying more never means seeing more.
+    expect(two.length).toBeLessThanOrEqual(one.length)
+  })
+
+  it('falls back to the best available rather than blanking when nothing uses them all', () => {
+    // No recipe here has both garlic and cream, so the 1-of-2 recipes are the best answer.
+    const shown = shortlist(matchPantry(RECIPES, states({ garlic: 'have', cream: 'have' }), REGISTRY))
+    expect(shown.length).toBeGreaterThan(0)
+    expect(shown.every((m) => m.matched === 1)).toBe(true)
+    expect(shown.map((m) => m.recipe.title)).toContain('Braised chicken thighs')
   })
 
   it('shows everything when she has confirmed nothing — the cold start is untouched', () => {
