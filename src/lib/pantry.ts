@@ -22,6 +22,7 @@
  * this whole file exists to prevent.
  */
 
+import { coversByPrefix } from './ingredients'
 import type { IngredientEntry, Recipe } from './types'
 
 export type IngredientState = 'have' | 'dontHave' | 'unknown'
@@ -63,9 +64,9 @@ type Mark = { entry: IngredientEntry; state: 'have' | 'dontHave'; names: string[
  *   2. a mark on an entry that shares a name with it (alias hit: her `spring onion`
  *      tile satisfies a recipe's `scallion` entry, whose aliases include `spring onion`)
  *   3. a mark on a more general entry, by the prefix convention: `chicken` covers
- *      `chicken thigh` because "chicken thigh".startsWith("chicken "). The trailing
- *      space is the guard — `chick` must never match `chicken`, nor `chicken` `chickpea`.
- *      The most specific prefix wins.
+ *      `chicken thigh`, but NOT `chicken stock` — see `coversByPrefix`, which guards both
+ *      the trailing space (`chick` must never match `chicken`) and the derived products
+ *      that are a different thing on the shelf. The most specific prefix wins.
  *
  * Within a tier a `dontHave` beats a `have`: "I'm out of it" is the hard fact.
  */
@@ -90,7 +91,7 @@ function resolveState(
       tier = 2
     } else {
       for (const general of mark.names) {
-        if (names.some((n) => n.startsWith(general + ' '))) {
+        if (names.some((n) => coversByPrefix(general, n))) {
           tier = 1
           specificity = Math.max(specificity, general.length)
         }

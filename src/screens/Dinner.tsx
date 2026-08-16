@@ -48,16 +48,16 @@ type MarkTab = 'dontHave' | 'have'
 
 const MARK_TABS: { state: MarkTab; label: string; groupLabel: string; activeClass: string }[] = [
   {
-    state: 'dontHave',
-    label: 'Don\u2019t have',
-    groupLabel: 'Ingredients you are out of',
-    activeClass: 'border-copper font-semibold text-copper',
-  },
-  {
     state: 'have',
     label: 'Have',
     groupLabel: 'Ingredients you have',
     activeClass: 'border-leaf font-semibold text-thyme',
+  },
+  {
+    state: 'dontHave',
+    label: 'Don\u2019t have',
+    groupLabel: 'Ingredients you are out of',
+    activeClass: 'border-copper font-semibold text-copper',
   },
 ]
 
@@ -70,9 +70,10 @@ export default function Dinner() {
   const registry = useLiveQuery(listIngredients, [], undefined)
 
   const [marks, setMarks] = useState<Marks>(() => readSession('marks', {}))
-  // Which tab is open decides what a tap means. `dontHave` leads: she is answering "what
-  // am I out of", which has a three-item answer, where "what do I have" is homework.
-  const [tab, setTab] = useState<MarkTab>(() => readSession('markTab', 'dontHave'))
+  // Which tab is open decides what a tap means. Have leads, at Alisa's request
+  // (2026-08-16) — saying what she has is what narrows the list, so it is the tab she
+  // opens on.
+  const [tab, setTab] = useState<MarkTab>(() => readSession('markTab', 'have'))
   const [query, setQuery] = useState('')
 
   function updateMarks(next: Marks) {
@@ -154,9 +155,14 @@ export default function Dinner() {
   const picked = Object.values(marks).filter((state) => state === 'have').length
   const using = shown.length > 0 ? shown[0].matched : 0
   const noun = shown.length === 1 ? 'recipe uses' : 'recipes use'
+  const marked = Object.keys(marks).length
   const tally = narrowed
     ? `${shown.length} ${noun} ${using === picked ? `all ${picked}` : `${using} of your ${picked}`} · ${ready.length} ready · ${ruledOut} ruled out`
-    : `${count} ${count === 1 ? 'recipe' : 'recipes'} · ${ready.length} ready · ${ruledOut} ruled out`
+    : marked === 0
+      // "104 ready" before she has said anything reads as a claim she can cook 104 things.
+      // Nothing is ruled out yet, which is a different statement — so say that instead.
+      ? `${count} ${count === 1 ? 'recipe' : 'recipes'} · tap what you have`
+      : `${count} ${count === 1 ? 'recipe' : 'recipes'} · ${ready.length} ready · ${ruledOut} ruled out`
 
   function openRecipe(uuid: string) {
     navigate(`/recipe/${uuid}`, { state: { from: '/dinner' } })

@@ -193,6 +193,25 @@ describe('matchPantry: how a mark reaches an ingredient', () => {
     expect(stew.notSure).toContain('chickpea')
   })
 
+  it('a mark on chicken does NOT reach chicken stock — the shrimp-recipe bug', () => {
+    const registry = [entry('chicken'), entry('chicken stock'), entry('shrimp'), entry('chicken thigh')]
+    const shrimp = recipe('Shrimp bisque', ['shrimp', 'chicken stock'], registry)
+    const thighs = recipe('Braised thighs', ['chicken thigh'], registry)
+    const marks = { 'id:chicken': 'have' as const }
+
+    const [bisque] = matchPantry([shrimp], marks, registry)
+    expect(bisque.confirmed).toEqual([]) // stock is a different thing on the shelf
+    expect(bisque.notSure).toEqual(['shrimp', 'chicken stock'])
+
+    const [braised] = matchPantry([thighs], marks, registry)
+    expect(braised.confirmed).toEqual(['chicken thigh']) // a cut still matches
+
+    // And it must not be shortlisted alongside the recipe that really uses chicken.
+    expect(shortlist(matchPantry([shrimp, thighs], marks, registry)).map((m) => m.recipe.title)).toEqual([
+      'Braised thighs',
+    ])
+  })
+
   it('a direct mark on the specific entry beats a prefix mark on the general one', () => {
     const marks = states({ chicken: 'have', 'chicken thigh': 'dontHave' })
     const [m] = matchPantry([chickenThighs], marks, REGISTRY)

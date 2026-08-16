@@ -266,6 +266,44 @@ export function canonicalNames(groups: { items: Ingredient[] }[]): string[] {
 }
 
 /**
+ * Words that turn a thing into a DIFFERENT thing you buy separately.
+ *
+ * The prefix convention says a pantry `chicken` covers `chicken thigh`, which is right —
+ * a thigh is a cut of chicken. It also made `chicken` cover `chicken stock`, which is
+ * wrong, and put a shrimp recipe in front of Alisa because it used stock (2026-08-16).
+ * Having a chicken is not having chicken stock; they are separate things on a shelf.
+ *
+ * Deliberately a BLOCK list rather than an allow-list of cuts. Anything unlisted still
+ * matches, so an unusual cut ("chicken maryland", "beef shin") is found rather than
+ * silently missed — and a miss is the invisible failure this whole area guards against.
+ *
+ * Things she CAN make from the base ingredient are deliberately absent: `lemon juice`,
+ * `lemon zest` and `orange peel` should still match a pantry `lemon` or `orange`.
+ */
+const DERIVED_PRODUCTS = new Set([
+  'stock', 'broth', 'bouillon', 'consomme', 'cube', 'cubes',
+  'powder', 'granule', 'granules', 'extract', 'essence', 'concentrate', 'seasoning',
+  'sauce', 'paste', 'puree', 'ketchup', 'mustard', 'mayonnaise', 'gravy',
+  'oil', 'vinegar', 'wine', 'liqueur', 'syrup',
+  'flour', 'milk', 'cream', 'butter',
+  'jam', 'jelly', 'marmalade', 'preserve', 'preserves',
+])
+
+/**
+ * Does a pantry entry named `general` cover a recipe ingredient named `specific`?
+ *
+ * The trailing space is the original guard — `chick` must never match `chicken`. The
+ * derived-product check is the second one: `chicken` covers `chicken thigh` but not
+ * `chicken stock`.
+ */
+export function coversByPrefix(general: string, specific: string): boolean {
+  if (!specific.startsWith(general + ' ')) return false
+  const rest = specific.slice(general.length + 1).trim()
+  if (!rest) return false
+  return !rest.split(' ').some((word) => DERIVED_PRODUCTS.has(word))
+}
+
+/**
  * Seeded true on things nobody runs out of; deliberately false on garlic, onion, egg,
  * milk and lemon, because people genuinely do. Used once, when the registry first
  * mints an entry — after that the flag is hers to change.

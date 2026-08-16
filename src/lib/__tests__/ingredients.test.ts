@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   canonicalNames,
+  coversByPrefix,
   fold,
   formatUnit,
   normalize,
@@ -139,5 +140,47 @@ describe('normalize: instruction tails', () => {
     expect(normalize('lime wedges for serving')).toBe('lime wedge')
     // Word boundaries: "tomato served" must not lose its "to serve".
     expect(normalize('tomato served warm')).toBe('tomato served warm')
+  })
+})
+
+describe('coversByPrefix — what a pantry entry actually covers', () => {
+  it('covers a cut of the thing', () => {
+    expect(coversByPrefix('chicken', 'chicken thigh')).toBe(true)
+    expect(coversByPrefix('chicken', 'chicken breast fillet')).toBe(true)
+    expect(coversByPrefix('beef', 'beef shin')).toBe(true)
+  })
+
+  it('does NOT cover a derived product — having a chicken is not having stock', () => {
+    // Reported by Alisa 2026-08-16: marking chicken put a SHRIMP recipe at the top,
+    // because the recipe used chicken stock.
+    expect(coversByPrefix('chicken', 'chicken stock')).toBe(false)
+    expect(coversByPrefix('chicken', 'chicken broth')).toBe(false)
+    expect(coversByPrefix('chicken', 'chicken stock cube')).toBe(false)
+    expect(coversByPrefix('chicken', 'chicken bouillon')).toBe(false)
+    expect(coversByPrefix('beef', 'beef stock')).toBe(false)
+    expect(coversByPrefix('garlic', 'garlic powder')).toBe(false)
+    expect(coversByPrefix('onion', 'onion paste')).toBe(false)
+    expect(coversByPrefix('olive', 'olive oil')).toBe(false)
+    expect(coversByPrefix('coconut', 'coconut milk')).toBe(false)
+    expect(coversByPrefix('peanut', 'peanut butter')).toBe(false)
+    expect(coversByPrefix('rice', 'rice wine')).toBe(false)
+    expect(coversByPrefix('almond', 'almond flour')).toBe(false)
+  })
+
+  it('still covers what she can make from the thing in her hand', () => {
+    expect(coversByPrefix('lemon', 'lemon juice')).toBe(true)
+    expect(coversByPrefix('lemon', 'lemon zest')).toBe(true)
+    expect(coversByPrefix('orange', 'orange peel')).toBe(true)
+  })
+
+  it('keeps the original guards: the space, and not covering itself', () => {
+    expect(coversByPrefix('chick', 'chicken')).toBe(false)
+    expect(coversByPrefix('chicken', 'chickpea')).toBe(false)
+    expect(coversByPrefix('chicken', 'chicken')).toBe(false)
+  })
+
+  it('fails OPEN on an unusual cut — a miss is the invisible failure', () => {
+    expect(coversByPrefix('chicken', 'chicken maryland')).toBe(true)
+    expect(coversByPrefix('pork', 'pork collar butt')).toBe(true)
   })
 })
