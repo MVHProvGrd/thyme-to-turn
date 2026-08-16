@@ -52,6 +52,9 @@ export default function RecipeList() {
               <Button variant="ghost" onClick={() => navigate('/books')}>
                 Books
               </Button>
+              <Button variant="ghost" onClick={() => navigate('/parse')}>
+                Photo
+              </Button>
               <Button variant="secondary" onClick={() => navigate('/edit')}>
                 + Add
               </Button>

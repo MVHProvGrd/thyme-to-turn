@@ -6,6 +6,8 @@ import Button from '../components/Button'
 import Photo from '../components/Photo'
 import SourceLine from '../components/SourceLine'
 import { addDishPhoto, getPhotoBlob, getRecipe, listIngredients, removePhoto } from '../db/repo'
+import { ParseError, parseRecipePhotos } from '../api/claude'
+import { hasApiKey } from '../api/key'
 import { prepareImage } from '../platform/camera'
 import { formatUnit } from '../lib/ingredients'
 import { stateFor } from '../lib/pantry'
@@ -35,6 +37,7 @@ export default function RecipeDetail() {
 
   const fileInput = useRef<HTMLInputElement>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
+  const [reading, setReading] = useState(false)
   const [cook, setCook] = useState(() => readPref('cookMode', false))
 
   /**
@@ -65,6 +68,32 @@ export default function RecipeDetail() {
       writePref(`done:${uuid}`, next)
       return next
     })
+  }
+
+  /**
+   * Read the stored page photos again. This is the other half of "keep the photos, read
+   * them later": an unverified recipe carrying page photos is a parse waiting for signal.
+   * Re-parse is always a button she presses — nothing re-sends a photo on its own, and
+   * nothing costs money without a tap.
+   */
+  async function readPages(pageUuids: string[]) {
+    setPhotoError(null)
+    setReading(true)
+    try {
+      const blobs = await Promise.all(pageUuids.map((id) => getPhotoBlob(id)))
+      const images = await Promise.all(
+        blobs.filter(Boolean).map(async (blob) => ({
+          base64: await blobToBase64(blob as Blob),
+          mediaType: 'image/jpeg' as const,
+        })),
+      )
+      const parsed = await parseRecipePhotos(images)
+      navigate(`/edit/${uuid}`, { state: { parsed } })
+    } catch (caught) {
+      setPhotoError(caught instanceof ParseError ? caught.message : "That didn't work.")
+    } finally {
+      setReading(false)
+    }
   }
 
   if (recipe === undefined) return <Screen>{null}</Screen>
@@ -210,13 +239,45 @@ export default function RecipeDetail() {
           </section>
         ) : null}
 
+        {recipe.photos.some((photo) => photo.kind === 'page') ? (
+          <section className="flex flex-col gap-2">
+            <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
+              The page
+            </h2>
+            <ul className="flex flex-wrap gap-2">
+              {recipe.photos
+                .filter((photo) => photo.kind === 'page')
+                .map((ref) => (
+                  <li key={ref.uuid}>
+                    <DishPhoto uuid={ref.uuid} title={`${recipe.title}, the page`} />
+                  </li>
+                ))}
+            </ul>
+            <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+              {recipe.verified
+                ? 'The page it came from, kept so a wrong line is always fixable.'
+                : 'Photographed but not read yet.'}
+            </p>
+            <Button
+              variant="secondary"
+              className="self-start"
+              disabled={reading || !hasApiKey()}
+              onClick={() =>
+                void readPages(recipe.photos.filter((p) => p.kind === 'page').map((p) => p.uuid))
+              }
+            >
+              {reading ? 'Reading…' : recipe.verified ? 'Read the page again' : 'Read the page'}
+            </Button>
+          </section>
+        ) : null}
+
         <section className="flex flex-col gap-2">
           <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
             Photos of it
           </h2>
-          {recipe.photos.length > 0 ? (
+          {recipe.photos.some((photo) => photo.kind === 'dish') ? (
             <ul className="flex flex-wrap gap-2">
-              {recipe.photos.map((ref) => (
+              {recipe.photos.filter((photo) => photo.kind === 'dish').map((ref) => (
                 <li key={ref.uuid} className="flex flex-col gap-1">
                   <DishPhoto uuid={ref.uuid} title={recipe.title} />
                   <div className="flex items-center gap-2">
@@ -277,7 +338,20 @@ export default function RecipeDetail() {
   )
 }
 
-/** One stored dish photo. Fetches its own blob so the list above stays a plain map. */
+/** Blob -> base64 without the data: prefix, which the API does not want. */
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result)
+      resolve(result.slice(result.indexOf(',') + 1))
+    }
+    reader.onerror = () => reject(new Error('read failed'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/** One stored photo. Fetches its own blob so the list above stays a plain map. */
 function DishPhoto({ uuid, title }: { uuid: string; title: string }) {
   const blob = useLiveQuery(() => getPhotoBlob(uuid), [uuid], undefined)
   return <Photo blob={blob} alt={`${title}, as made`} className="h-24 w-24" />

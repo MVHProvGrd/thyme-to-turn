@@ -145,6 +145,39 @@ export type IngredientEntry = {
   seenCount: number
 }
 
+/**
+ * What a photographed page comes back as. Declared here rather than beside the prompt
+ * because `lib/` may not import `api/`, and the pure code that turns a parse into form
+ * fields (`lib/parse-result.ts`) needs it. `api/prompts.ts` owns the JSON schema that
+ * guarantees this shape — change the two together.
+ *
+ * Every field is nullable on purpose: an empty field is a correct answer, and a plausible
+ * guess is the failure mode the whole verification gate exists to catch.
+ */
+export type ParsedRecipe = {
+  /** True when the page was an index, a chapter opener or a photograph. */
+  notARecipe: boolean
+  title: string | null
+  yield: string | null
+  times: { prepMinutes: number | null; cookMinutes: number | null; totalMinutes: number | null } | null
+  ingredients: {
+    heading: string | null
+    items: {
+      /** The line exactly as printed. Never rewritten, by anything, ever. */
+      raw: string
+      quantity: number | null
+      unit: string | null
+      item: string | null
+      canonical: string | null
+      note: string | null
+      optional: boolean
+    }[]
+  }[]
+  steps: string[]
+  /** Dotted paths the model could not read cleanly, e.g. "ingredients.0.quantity". */
+  lowConfidenceFields: string[]
+}
+
 export type PhotoBlob = {
   uuid: Uuid
   blob: Blob

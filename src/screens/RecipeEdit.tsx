@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import Screen from '../components/Screen'
 import Button from '../components/Button'
 import { Input, Label, Textarea } from '../components/Field'
 import { useToast } from '../components/Toast'
 import Tile from '../components/Tile'
+import { PARSE_MODEL } from '../api/claude'
+import { RECIPE_SCHEMA_VERSION } from '../api/prompts'
 import { deleteRecipe, getRecipe, listBooks, listCategories, saveRecipe } from '../db/repo'
 import { hasCategory, sameCategory, toggleCategory } from '../lib/categories'
-import type { Recipe } from '../lib/types'
+import { draftFromParsed, groupsFromLines, isDoubted } from '../lib/parse-result'
+import type { ParsedRecipe, PhotoRef, Recipe } from '../lib/types'
 
 /**
  * Type one in.
@@ -22,7 +25,7 @@ import type { Recipe } from '../lib/types'
  * will arrive as exactly this shape, and it must not exist in the database until a human
  * has looked at it.
  */
-type Line = { quantity: string; item: string }
+type Line = { quantity: string; item: string; raw?: string; optional?: boolean }
 
 const EMPTY_LINES: Line[] = [
   { quantity: '', item: '' },
@@ -33,15 +36,29 @@ const EMPTY_LINES: Line[] = [
 export default function RecipeEdit() {
   const { uuid } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const toast = useToast()
 
+  /*
+   * ★ THE VERIFICATION GATE. A parse arrives here in navigation state and NOTHING has been
+   * written — the recipe does not exist until she presses Save. Fields the model was unsure
+   * of are marked so she checks those first rather than re-reading the whole page.
+   */
+  const incoming = (location.state ?? null) as { parsed?: ParsedRecipe; photos?: PhotoRef[] } | null
+  const fromParse = incoming?.parsed ? draftFromParsed(incoming.parsed) : null
+
   const [loaded, setLoaded] = useState(!uuid)
+  const doubts = fromParse?.doubts ?? new Set<string>()
   const [existing, setExisting] = useState<Recipe | null>(null)
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(fromParse?.title ?? '')
   const [citation, setCitation] = useState('')
   const [page, setPage] = useState('')
-  const [lines, setLines] = useState<Line[]>(EMPTY_LINES)
-  const [method, setMethod] = useState('')
+  const [lines, setLines] = useState<Line[]>(
+    fromParse?.lines.length
+      ? fromParse.lines.map((l) => ({ quantity: l.quantity, item: l.item, raw: l.raw, optional: l.optional }))
+      : EMPTY_LINES,
+  )
+  const [method, setMethod] = useState(fromParse?.method ?? '')
   const [notes, setNotes] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [bookUuid, setBookUuid] = useState('')
@@ -66,6 +83,16 @@ export default function RecipeEdit() {
         return
       }
       setExisting(recipe)
+      // A re-parse arrives with `fromParse` already in the fields — don't overwrite it with
+      // what is on disk, or pressing "read it again" would silently show the old text.
+      if (fromParse) {
+        setBookUuid(recipe.source.bookUuid ?? '')
+        setPage(recipe.source.pageStart ? String(recipe.source.pageStart) : '')
+        setNotes(recipe.notes ?? '')
+        setTags(recipe.tags)
+        setLoaded(true)
+        return
+      }
       setTitle(recipe.title)
       setCitation(recipe.source.citation ?? '')
       setBookUuid(recipe.source.bookUuid ?? '')
@@ -107,14 +134,15 @@ export default function RecipeEdit() {
           ...(!bookUuid && citation.trim() ? { citation: citation.trim() } : {}),
           ...(Number(page) > 0 ? { pageStart: Number(page) } : {}),
         },
-        ingredients: [
-          {
-            items: lines
-              .map((line) => `${line.quantity} ${line.item}`.trim())
-              .filter(Boolean)
-              .map((raw) => ({ raw })),
-          },
-        ],
+        // A parsed line keeps the page's exact `raw`; a typed one is built from the boxes.
+        ingredients: groupsFromLines(
+          lines.map((line) => ({
+            raw: (line.raw ?? `${line.quantity} ${line.item}`).trim(),
+            quantity: line.quantity,
+            item: line.item,
+            optional: Boolean(line.optional),
+          })),
+        ),
         steps: method
           .split('\n')
           .map((text) => text.trim())
@@ -122,6 +150,17 @@ export default function RecipeEdit() {
           .map((text, index) => ({ n: index + 1, text })),
         notes,
         tags,
+        ...(incoming?.photos ? { photos: incoming.photos } : {}),
+        ...(incoming?.parsed
+          ? {
+              parse: {
+                model: PARSE_MODEL,
+                schemaVersion: RECIPE_SCHEMA_VERSION,
+                parsedAt: new Date().toISOString(),
+                lowConfidenceFields: incoming.parsed.lowConfidenceFields ?? [],
+              },
+            }
+          : {}),
       })
       toast('Saved.')
       navigate(`/recipe/${saved.uuid}`, { replace: true })
@@ -163,6 +202,17 @@ export default function RecipeEdit() {
       }
     >
       <div className="flex flex-col gap-[18px] px-5 pb-10 pt-5">
+        {fromParse ? (
+          <div className="rounded-sm border border-rule border-l-2 border-l-leaf bg-card px-[14px] py-[13px]">
+            <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+              Read from your photo. Nothing is saved yet — check it and press Save.
+              {doubts.size > 0
+                ? ` ${doubts.size} ${doubts.size === 1 ? 'field was' : 'fields were'} hard to read; those are marked.`
+                : ''}
+            </p>
+          </div>
+        ) : null}
+
         <Input
           label="Title"
           serif
@@ -244,7 +294,12 @@ export default function RecipeEdit() {
         <div className="flex flex-col gap-2">
           <Label>Ingredients</Label>
           {lines.map((line, index) => (
-            <div key={index} className="grid grid-cols-[88px_1fr_44px] gap-2">
+            <div
+              key={index}
+              className={`grid grid-cols-[88px_1fr_44px] gap-2 ${
+                isDoubted(doubts, `ingredients.${index}`) ? 'border-l-2 border-copper pl-2' : ''
+              }`}
+            >
               <input
                 value={line.quantity}
                 onChange={(event) => updateLine(index, { quantity: event.target.value })}

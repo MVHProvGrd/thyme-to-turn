@@ -40,6 +40,10 @@ export type RecipeDraft = {
   tags?: string[]
   yield?: Recipe['yield']
   times?: Recipe['times']
+  /** Page photos captured before the recipe existed (the parse flow). Added, never replaced. */
+  photos?: PhotoRef[]
+  /** Provenance of an AI parse, recorded so a better model can find it again later. */
+  parse?: Recipe['parse']
 }
 
 /* ------------------------------------------------------------------ recipes */
@@ -173,9 +177,9 @@ export async function saveRecipe(draft: RecipeDraft, options: SaveOptions = {}):
     steps,
     ...(draft.notes?.trim() ? { notes: draft.notes.trim() } : {}),
     tags: draft.tags ?? existing?.tags ?? [],
-    photos: existing?.photos ?? [],
+    photos: [...(existing?.photos ?? []), ...(draft.photos ?? [])],
     ingredientIndex,
-    ...(existing?.parse ? { parse: existing.parse } : {}),
+    ...(draft.parse ?? existing?.parse ? { parse: draft.parse ?? existing?.parse } : {}),
     verified: options.verified ?? true,
   }
 

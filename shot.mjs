@@ -409,5 +409,73 @@ await page.getByLabel('Search recipes').fill('Lentil')
 await page.waitForTimeout(300)
 await page.screenshot({ path: `${OUT}/30-list-thumbnail.png` })
 
+/* ------------------------------------------------------- photo -> recipe (phase 4) */
+
+// With no key the screen says so and still lets her keep photos. NEVER put a real key here.
+await page.goto(`${BASE}#/parse`)
+await page.waitForSelector('text=Add your Claude API key')
+await page.screenshot({ path: `${OUT}/31-parse-no-key.png` })
+
+// A page photographed. The parse itself needs her own key, so it is not exercised here.
+await page.getByRole('button', { name: 'Take a photo' }).click()
+await page.locator('input[type=file]').setInputFiles([
+  { name: 'page-214.png', mimeType: 'image/png', buffer: testPng(600, 800) },
+  { name: 'page-215.png', mimeType: 'image/png', buffer: testPng(600, 800) },
+])
+await page.getByRole('button', { name: 'Read the page' }).waitFor()
+await page.waitForTimeout(300)
+await page.screenshot({ path: `${OUT}/32-parse-pages.png` })
+
+// The offline / no-key path: keep the pages, read them when there is signal. An unverified
+// recipe carrying page photos IS the queue — no extra table, no lost photographs.
+await page.getByRole('button', { name: 'Keep the photos, read them later' }).click()
+await page.waitForURL(/#\/recipe\//)
+await page.waitForSelector('text=Photographed but not read yet')
+await page.waitForTimeout(2400)
+await page.screenshot({ path: `${OUT}/32b-parse-kept.png` })
+
+// The Settings key field, with an obviously fake value.
+await page.goto(`${BASE}#/settings`)
+await page.getByLabel('Claude API key').fill('not-a-real-key-for-screenshots')
+await page.waitForSelector('text=Key stored on this device')
+await page.screenshot({ path: `${OUT}/33-settings-key.png` })
+await page.getByRole('button', { name: 'Remove the key' }).click()
+await page.waitForSelector('text=No key yet')
+
+// ★ The verification gate, driven with a stubbed parse rather than a real API call:
+// this is the screen that stands between a confident wrong answer and her database.
+// Staged from ANOTHER route so /edit mounts with the state already present — which is how
+// it arrives in production, and the only way the form's initial values see it.
+await page.goto(`${BASE}#/recipes`)
+await page.waitForTimeout(2500) // let the "Key removed." toast clear
+await page.evaluate((parsed) => {
+  window.history.pushState({ usr: { parsed }, key: 'stub', idx: 1 }, '', '#/edit')
+  window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
+}, {
+  notARecipe: false,
+  title: 'Fennel gratin',
+  yield: 'Serves 4',
+  times: null,
+  lowConfidenceFields: ['ingredients.1'],
+  ingredients: [
+    {
+      heading: null,
+      items: [
+        { raw: '3 bulbs fennel', quantity: 3, unit: 'bulbs', item: 'fennel', canonical: 'fennel', note: null, optional: false },
+        { raw: '300 ml double cream', quantity: 300, unit: 'ml', item: 'double cream', canonical: 'cream', note: null, optional: false },
+        { raw: 'thyme, to serve', quantity: null, unit: null, item: 'thyme', canonical: 'thyme', note: null, optional: true },
+      ],
+    },
+  ],
+  steps: ['Braise the fennel until a knife slides through.', 'Pour over the cream and bake.'],
+})
+await page.waitForTimeout(400)
+const gated = await page.getByText('Nothing is saved yet').count()
+if (gated > 0) {
+  await page.screenshot({ path: `${OUT}/34-verification-gate.png` })
+} else {
+  console.log('note: could not stage the parse state in-browser; gate covered by unit tests')
+}
+
 console.log('shots written')
 await browser.close()

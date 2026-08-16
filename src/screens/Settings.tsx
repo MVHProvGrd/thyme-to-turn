@@ -16,6 +16,7 @@ import {
   wipeEverything,
 } from '../db/repo'
 import { emojiFor } from '../lib/emoji'
+import { clearApiKey, getApiKey, setApiKey } from '../api/key'
 import { addCategoryToList, listCategories, removeCategoryFromList } from '../db/repo'
 import { STARTER_COUNT, loadStarterRecipes } from '../seed'
 import { downloadText, formatBytes } from '../platform/files'
@@ -42,6 +43,8 @@ export default function Settings() {
   const [busy, setBusy] = useState(false)
   const categories = useLiveQuery(listCategories, [], undefined)
   const [newCategory, setNewCategory] = useState('')
+  // Read once into local state; api/key.ts is the only thing that touches the secret.
+  const [apiKey, setApiKeyValue] = useState(() => getApiKey())
 
   async function addCat() {
     const name = newCategory
@@ -102,8 +105,55 @@ export default function Settings() {
     <Screen header={<ScreenHeader title="Settings" />}>
       <div className="flex flex-col gap-7 px-5 pb-10 pt-5">
         <p className="rounded-sm border border-rule border-l-2 border-l-leaf bg-card px-[14px] py-[13px] font-mono text-[11px] leading-[1.6] text-ink-soft">
-          Everything works offline and stays on this phone. Nothing is uploaded anywhere.
+          Everything works offline and stays on this phone. The key below is the one exception,
+          and it is only used to read a page you photograph.
         </p>
+
+        <section className="flex flex-col gap-3">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
+            Claude API key
+          </h2>
+          <div className="flex flex-col gap-[6px]">
+            <input
+              value={apiKey}
+              onChange={(event) => {
+                setApiKeyValue(event.target.value)
+                setApiKey(event.target.value)
+              }}
+              placeholder="paste your key"
+              aria-label="Claude API key"
+              autoComplete="off"
+              spellCheck={false}
+              className="min-h-[48px] w-full rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+            />
+            <p
+              className={`font-mono text-[11px] leading-[1.6] ${
+                apiKey.trim().length > 8 ? 'text-thyme' : 'text-ink-soft'
+              }`}
+            >
+              {apiKey.trim().length > 8
+                ? 'Key stored on this device.'
+                : 'No key yet. Photo-parse stays off until there is one.'}
+            </p>
+            <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+              It stays in this browser, never goes into a backup, and is only sent to Anthropic
+              when you ask it to read a photo. Roughly a penny or two a recipe.
+            </p>
+          </div>
+          {apiKey ? (
+            <Button
+              variant="secondary"
+              className="self-start"
+              onClick={() => {
+                clearApiKey()
+                setApiKeyValue('')
+                toast('Key removed.')
+              }}
+            >
+              Remove the key
+            </Button>
+          ) : null}
+        </section>
 
         <section className="flex flex-col gap-3">
           <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">

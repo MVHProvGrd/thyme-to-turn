@@ -65,18 +65,21 @@ src/seed/       the starter recipes (data + a lazy loader); imports only lib/ ty
 
 ## What exists right now
 
-Phases 1–3 are done: storage and typed entry, the dinner screen, and books + photos.
+Phases 1–4 are done: storage and typed entry, the dinner screen, books + photos, and
+photo → recipe. **The live parse has never been run** — it needs Alisa's own API key, which
+this project must never hold. Everything around it is tested; the call itself is not.
 
 ```
 lib/        types.ts · ids.ts · ingredients.ts · search.ts · backup-format.ts
             pantry.ts (matchPantry · nextQuestions · shortlist · stateFor) · emoji.ts
-            categories.ts · isbn.ts · books.ts
+            categories.ts · isbn.ts · books.ts · parse-result.ts
 platform/   clock.ts · prefs.ts (localStorage prefs + sessionStorage marks) · files.ts
             motion.ts · barcode.ts (the scanner seam) · camera.ts (downscale + crop)
 api/        openlibrary.ts — the only file that talks to Open Library
+            key.ts (the ONLY place the secret is touched) · prompts.ts · claude.ts
 db/         schema.ts (v1) · db.ts · repo.ts · backup.ts
 screens/    Dinner (landing) · RecipeList · RecipeDetail (cook mode) · RecipeEdit · Settings
-            BookList · BookScan · BookDetail · BookEdit · PhotoCrop
+            BookList · BookScan · BookDetail · BookEdit · PhotoCrop · RecipeParse
 components/ Screen · TabBar · Button · Field · Toast · SourceLine · EmptyState · Tile
             useFlip · useObjectUrl · Photo
 seed/       starter.json (100 recipes) · index.ts (loader) · README.md (source, licence)
@@ -196,6 +199,27 @@ seen the live page.
   gets a `crop` rect and keeps its pixels. Everything is downscaled to 2000px/q0.85 by
   `platform/camera.ts` BEFORE it is stored — don't lower it, that resolution is what makes a
   fraction glyph legible when the photo is the only source of truth left.
+- **★ The verification gate is where a parse lives until she accepts it.** `RecipeParse`
+  never writes a parsed recipe: the result travels to `RecipeEdit` in navigation state and
+  only reaches `repo.saveRecipe` when she presses Save. Fields the model flagged get a
+  copper rule so she checks those first. Do not "helpfully" auto-save a parse — a confident
+  wrong answer is worse than no answer, and she finds out while creaming the butter.
+  `RecipeEdit` reads the parse in its `useState` initialisers, so the route must MOUNT with
+  the state present; a re-parse of a saved recipe deliberately does not overwrite the
+  incoming fields with what is on disk.
+- **The offline queue is an unverified recipe with page photos on it** — not a new table
+  and not a schema change. "Keep the photos, read them later" saves the pages against an
+  unverified recipe, and the recipe screen offers "Read the page" whenever there is signal.
+  That button is always available once photos exist, including with no key at all, or she
+  could photograph a page and have no way to keep it.
+- **Re-parse is a button she presses.** Nothing re-sends a photo automatically and nothing
+  costs money without a tap.
+- **`ParsedRecipe` lives in `lib/types.ts`, the JSON schema in `api/prompts.ts`.** They
+  mirror each other and change together; the type is in `lib/` because `lib/` may not
+  import `api/` and the pure conversion (`lib/parse-result.ts`) needs it.
+- **The prompt captures functional content only** — ingredients, method, yield, times — and
+  is explicitly told to ignore the headnote and the author's prose. That is a rights
+  posture as much as a product one (05-SOURCES-AND-RIGHTS.md), and it is not decoration.
 - **Categories are `tags`.** `Recipe.tags` has existed and been indexed (`*tags`) since
   v1 and was already in the search haystack, so categories shipped with **no migration and
   no new field on the recipe**. The vocabulary (presets + whatever she invents) is
@@ -353,6 +377,14 @@ The point of the app. Two ways in, one engine:
   `files: []` with three project references (app / node / test), so a bare `--noEmit`
   silently checks nothing. Test files are their own project because they need node types
   that browser code must not have.
+- **Clearing a file input empties its `FileList`.** `event.target.value = ''` before
+  reading `files.length` always saw zero — copy the list out with `Array.from` FIRST. A
+  single-file handler that grabs `files[0]` before clearing survives; a multi-file one does
+  not, which is why this only showed up on the parse screen.
+- The Anthropic SDK is lazily imported so it lands in its own chunk (~156 KB) and only
+  downloads when she actually parses a photo.
+- `erasableSyntaxOnly` is on, so TypeScript constructor parameter properties
+  (`constructor(readonly kind: X)`) do not compile. Declare the fields.
 - A bare `pkill -f "vite preview"` exits 144 and **aborts the rest of a compound command**.
   Run kills on their own line.
 - Playwright: the preinstalled Chromium is at
