@@ -498,10 +498,11 @@ const REPLY = [
       title: 'Braised fennel with cream',
       yield: 'Serves 4',
       ingredients: [
-        '3 bulbs fennel, halved',
-        '300 ml double cream',
-        '60 g parmesan, grated',
-        'thyme, to serve',
+        {
+          heading: 'For the gratin',
+          items: ['3 bulbs fennel, halved', '300 ml double cream', '60 g parmesan, grated'],
+        },
+        { heading: 'To serve', items: [{ raw: 'thyme', optional: true }] },
       ],
       method: '1. Braise the fennel until a knife slides through.\n2. Pour over the cream and bake.',
       lowConfidenceFields: ['ingredients.1'],
@@ -520,8 +521,12 @@ await page.waitForTimeout(300)
 await page.screenshot({ path: `${OUT}/36-any-ai-gate.png` })
 
 // It is still only a suggestion until she says so — Save is what writes it.
+// The headings are editable rows, not something that quietly collapses on save.
+await page.getByLabel('Group heading 1').waitFor()
 await page.getByRole('button', { name: 'Save' }).click()
 await page.waitForURL(/#\/recipe\//)
+await page.waitForSelector('text=For the gratin')
+await page.waitForSelector('text=To serve')
 await page.waitForTimeout(2400)
 await page.screenshot({ path: `${OUT}/37-any-ai-saved.png` })
 

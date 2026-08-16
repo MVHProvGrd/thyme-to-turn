@@ -10,7 +10,8 @@ import { PARSE_MODEL } from '../api/claude'
 import { RECIPE_SCHEMA_VERSION } from '../api/prompts'
 import { deleteRecipe, getRecipe, listBooks, listCategories, saveRecipe } from '../db/repo'
 import { hasCategory, sameCategory, toggleCategory } from '../lib/categories'
-import { draftFromParsed, groupsFromLines, isDoubted } from '../lib/parse-result'
+import { draftFromParsed, groupsFromRows, isDoubted } from '../lib/parse-result'
+import type { DraftRow } from '../lib/parse-result'
 import type { ParsedRecipe, PhotoRef, Recipe } from '../lib/types'
 
 /**
@@ -25,13 +26,36 @@ import type { ParsedRecipe, PhotoRef, Recipe } from '../lib/types'
  * will arrive as exactly this shape, and it must not exist in the database until a human
  * has looked at it.
  */
-type Line = { quantity: string; item: string; raw?: string; optional?: boolean }
+/**
+ * The ingredient editor is a flat list of rows, and a heading is a row of its own, so
+ * "For the crust" survives a parse, an edit and a save. A merged list is a wrong recipe,
+ * not an untidy one.
+ */
+type Row =
+  | { kind: 'heading'; text: string }
+  | { kind: 'item'; quantity: string; item: string; raw?: string; optional?: boolean; index?: number }
 
-const EMPTY_LINES: Line[] = [
-  { quantity: '', item: '' },
-  { quantity: '', item: '' },
-  { quantity: '', item: '' },
+const EMPTY_ROWS: Row[] = [
+  { kind: 'item', quantity: '', item: '' },
+  { kind: 'item', quantity: '', item: '' },
+  { kind: 'item', quantity: '', item: '' },
 ]
+
+/** Rows for saving: a typed line has no `raw`, so it is built from the two boxes. */
+function toDraftRows(rows: Row[]): DraftRow[] {
+  return rows.map((row) =>
+    row.kind === 'heading'
+      ? row
+      : {
+          kind: 'item' as const,
+          raw: (row.raw ?? `${row.quantity} ${row.item}`).trim(),
+          quantity: row.quantity,
+          item: row.item,
+          optional: Boolean(row.optional),
+          index: row.index ?? 0,
+        },
+  )
+}
 
 export default function RecipeEdit() {
   const { uuid } = useParams()
@@ -53,11 +77,7 @@ export default function RecipeEdit() {
   const [title, setTitle] = useState(fromParse?.title ?? '')
   const [citation, setCitation] = useState('')
   const [page, setPage] = useState('')
-  const [lines, setLines] = useState<Line[]>(
-    fromParse?.lines.length
-      ? fromParse.lines.map((l) => ({ quantity: l.quantity, item: l.item, raw: l.raw, optional: l.optional }))
-      : EMPTY_LINES,
-  )
+  const [rows, setRows] = useState<Row[]>(fromParse?.rows.length ? fromParse.rows : EMPTY_ROWS)
   const [method, setMethod] = useState(fromParse?.method ?? '')
   const [notes, setNotes] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -97,15 +117,21 @@ export default function RecipeEdit() {
       setCitation(recipe.source.citation ?? '')
       setBookUuid(recipe.source.bookUuid ?? '')
       setPage(recipe.source.pageStart ? String(recipe.source.pageStart) : '')
-      const flat = recipe.ingredients.flatMap((group) => group.items)
-      setLines(
-        flat.length
-          ? flat.map((item) => ({
-              quantity: [item.quantity ?? '', item.unit ?? ''].filter(String).join(' ').trim(),
-              item: item.item ?? item.raw,
-            }))
-          : EMPTY_LINES,
-      )
+      // Rebuild the rows from the saved groups, headings and all.
+      const loaded: Row[] = []
+      for (const group of recipe.ingredients) {
+        if (group.heading) loaded.push({ kind: 'heading', text: group.heading })
+        for (const item of group.items) {
+          loaded.push({
+            kind: 'item',
+            quantity: [item.quantity ?? '', item.unit ?? ''].filter(String).join(' ').trim(),
+            item: item.item ?? item.raw,
+            raw: item.raw,
+            optional: item.optional,
+          })
+        }
+      }
+      setRows(loaded.length ? loaded : EMPTY_ROWS)
       setMethod(recipe.steps.map((step) => step.text).join('\n'))
       setNotes(recipe.notes ?? '')
       setTags(recipe.tags)
@@ -116,8 +142,8 @@ export default function RecipeEdit() {
     }
   }, [uuid])
 
-  function updateLine(index: number, patch: Partial<Line>) {
-    setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+  function updateRow(at: number, patch: Partial<Extract<Row, { kind: 'item' }>> | { text: string }) {
+    setRows((current) => current.map((row, i) => (i === at ? ({ ...row, ...patch } as Row) : row)))
   }
 
   async function save() {
@@ -135,14 +161,8 @@ export default function RecipeEdit() {
           ...(Number(page) > 0 ? { pageStart: Number(page) } : {}),
         },
         // A parsed line keeps the page's exact `raw`; a typed one is built from the boxes.
-        ingredients: groupsFromLines(
-          lines.map((line) => ({
-            raw: (line.raw ?? `${line.quantity} ${line.item}`).trim(),
-            quantity: line.quantity,
-            item: line.item,
-            optional: Boolean(line.optional),
-          })),
-        ),
+        // A parsed line keeps the page's exact `raw`; a typed one is built from the boxes.
+        ingredients: groupsFromRows(toDraftRows(rows)),
         steps: method
           .split('\n')
           .map((text) => text.trim())
@@ -293,44 +313,77 @@ export default function RecipeEdit() {
 
         <div className="flex flex-col gap-2">
           <Label>Ingredients</Label>
-          {lines.map((line, index) => (
-            <div
-              key={index}
-              className={`grid grid-cols-[88px_1fr_44px] gap-2 ${
-                isDoubted(doubts, `ingredients.${index}`) ? 'border-l-2 border-copper pl-2' : ''
-              }`}
-            >
-              <input
-                value={line.quantity}
-                onChange={(event) => updateLine(index, { quantity: event.target.value })}
-                placeholder="1½ cups"
-                aria-label={`Quantity, line ${index + 1}`}
-                className="min-h-[48px] rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60"
-              />
-              <input
-                value={line.item}
-                onChange={(event) => updateLine(index, { item: event.target.value })}
-                placeholder="flour"
-                aria-label={`Ingredient, line ${index + 1}`}
-                className="min-h-[48px] rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60"
-              />
-              <button
-                type="button"
-                onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
-                aria-label={`Remove line ${index + 1}`}
-                className="min-h-[44px] rounded-sm border border-rule text-copper"
+          {rows.map((row, index) => {
+            const itemNumber = rows.slice(0, index).filter((r) => r.kind === 'item').length + 1
+            if (row.kind === 'heading') {
+              return (
+                <div key={index} className="grid grid-cols-[1fr_44px] gap-2 pt-1">
+                  <input
+                    value={row.text}
+                    onChange={(event) => updateRow(index, { text: event.target.value })}
+                    placeholder="For the crust"
+                    aria-label={`Group heading ${index + 1}`}
+                    className="min-h-[48px] rounded-sm border border-rule bg-card px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft placeholder:text-ink-soft/60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRows((current) => current.filter((_, i) => i !== index))}
+                    aria-label={`Remove heading ${index + 1}`}
+                    className="min-h-[44px] rounded-sm border border-rule text-copper"
+                  >
+                    −
+                  </button>
+                </div>
+              )
+            }
+            return (
+              <div
+                key={index}
+                className={`grid grid-cols-[88px_1fr_44px] gap-2 ${
+                  isDoubted(doubts, `ingredients.${row.index ?? -1}`) ? 'border-l-2 border-copper pl-2' : ''
+                }`}
               >
-                −
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setLines((current) => [...current, { quantity: '', item: '' }])}
-            className="min-h-[44px] rounded-sm border border-dashed border-rule font-mono text-xs text-thyme"
-          >
-            + Add a line
-          </button>
+                <input
+                  value={row.quantity}
+                  onChange={(event) => updateRow(index, { quantity: event.target.value })}
+                  placeholder="1½ cups"
+                  aria-label={`Quantity, line ${itemNumber}`}
+                  className="min-h-[48px] rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60"
+                />
+                <input
+                  value={row.item}
+                  onChange={(event) => updateRow(index, { item: event.target.value })}
+                  placeholder="flour"
+                  aria-label={`Ingredient, line ${itemNumber}`}
+                  className="min-h-[48px] rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRows((current) => current.filter((_, i) => i !== index))}
+                  aria-label={`Remove line ${itemNumber}`}
+                  className="min-h-[44px] rounded-sm border border-rule text-copper"
+                >
+                  −
+                </button>
+              </div>
+            )
+          })}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setRows((current) => [...current, { kind: 'item', quantity: '', item: '' }])}
+              className="min-h-[44px] rounded-sm border border-dashed border-rule font-mono text-xs text-thyme"
+            >
+              + Add a line
+            </button>
+            <button
+              type="button"
+              onClick={() => setRows((current) => [...current, { kind: 'heading', text: '' }])}
+              className="min-h-[44px] rounded-sm border border-dashed border-rule font-mono text-xs text-ink-soft"
+            >
+              + Add a heading
+            </button>
+          </div>
         </div>
 
         <Textarea

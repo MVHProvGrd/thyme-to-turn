@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { countDoubts, draftFromParsed, groupsFromLines, isDoubted } from '../parse-result'
+import { countDoubts, draftFromParsed, groupsFromLines, groupsFromRows, isDoubted } from '../parse-result'
 import type { ParsedRecipe } from '../types'
 
 function parsed(partial: Partial<ParsedRecipe> = {}): ParsedRecipe {
@@ -114,5 +114,78 @@ describe('groupsFromLines', () => {
 
   it('is empty rather than a group with nothing in it', () => {
     expect(groupsFromLines([])).toEqual([])
+  })
+})
+
+describe('rows — headings are editable, not silently flattened', () => {
+  const twoGroups = parsed({
+    ingredients: [
+      { heading: 'For the crust', items: [line('200 g flour'), line('100 g butter')] },
+      { heading: 'For the filling', items: [line('3 eggs')] },
+    ],
+  })
+
+  it('puts a heading row above the items it introduces', () => {
+    const { rows } = draftFromParsed(twoGroups)
+    expect(rows.map((r) => (r.kind === 'heading' ? `# ${r.text}` : r.item))).toEqual([
+      '# For the crust',
+      'flour',
+      'butter',
+      '# For the filling',
+      'eggs', // `item` keeps the page's wording; only `canonical` is singularised
+    ])
+  })
+
+  it('numbers items by their place in the PARSE, so doubts still point at the right row', () => {
+    const { rows } = draftFromParsed(twoGroups)
+    const items = rows.filter((r) => r.kind === 'item') as Extract<typeof rows[number], { kind: 'item' }>[]
+    expect(items.map((r) => r.index)).toEqual([0, 1, 2])
+  })
+
+  it('skips a heading with nothing under it', () => {
+    const { rows } = draftFromParsed(
+      parsed({ ingredients: [{ heading: 'For the glaze', items: [] }, { heading: null, items: [line('1 onion')] }] }),
+    )
+    expect(rows.filter((r) => r.kind === 'heading')).toHaveLength(0)
+  })
+})
+
+describe('groupsFromRows', () => {
+  it('starts a new group at each heading', () => {
+    expect(
+      groupsFromRows([
+        { kind: 'heading', text: 'For the crust' },
+        { kind: 'item', raw: '200 g flour', quantity: '200 g', item: 'flour', optional: false, index: 0 },
+        { kind: 'heading', text: 'For the filling' },
+        { kind: 'item', raw: '3 eggs', quantity: '3', item: 'eggs', optional: false, index: 1 },
+      ]),
+    ).toEqual([
+      { heading: 'For the crust', items: [{ raw: '200 g flour' }] },
+      { heading: 'For the filling', items: [{ raw: '3 eggs' }] },
+    ])
+  })
+
+  it('keeps anything before the first heading in an unnamed group', () => {
+    expect(
+      groupsFromRows([
+        { kind: 'item', raw: '1 onion', quantity: '1', item: 'onion', optional: false, index: 0 },
+        { kind: 'heading', text: 'To serve' },
+        { kind: 'item', raw: 'parsley', quantity: '', item: 'parsley', optional: true, index: 1 },
+      ]),
+    ).toEqual([
+      { items: [{ raw: '1 onion' }] },
+      { heading: 'To serve', items: [{ raw: 'parsley', optional: true }] },
+    ])
+  })
+
+  it('drops an empty section rather than saving a heading with nothing in it', () => {
+    expect(
+      groupsFromRows([
+        { kind: 'heading', text: 'For the glaze' },
+        { kind: 'heading', text: 'For the cake' },
+        { kind: 'item', raw: '200 g flour', quantity: '', item: 'flour', optional: false, index: 0 },
+      ]),
+    ).toEqual([{ heading: 'For the cake', items: [{ raw: '200 g flour' }] }])
+    expect(groupsFromRows([])).toEqual([])
   })
 })

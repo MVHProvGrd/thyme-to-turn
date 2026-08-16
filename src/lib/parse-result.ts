@@ -15,10 +15,25 @@ import type { ParsedRecipe } from './types'
 /** One editable ingredient row, the same shape the typed-in path uses. */
 export type DraftLine = { quantity: string; item: string; raw: string; optional: boolean }
 
+/**
+ * The ingredient editor is a flat list of rows, and a heading is a row of its own.
+ *
+ * Groups are load-bearing, not decoration: a cook following a merged list creams the
+ * filling's butter into the pastry. They survived the parse from the beginning but the
+ * form had no way to show them, so they collapsed on save — this is what fixes that.
+ *
+ * `index` is the item's position in the ORIGINAL parse, so a doubt recorded as
+ * `ingredients.1` still points at the right row once headings are interleaved.
+ */
+export type DraftRow =
+  | { kind: 'heading'; text: string }
+  | { kind: 'item'; quantity: string; item: string; raw: string; optional: boolean; index: number }
+
 export type ParsedDraft = {
   title: string
   yieldText: string
   lines: DraftLine[]
+  rows: DraftRow[]
   method: string
   /** Dotted paths the model was unsure of, normalized and deduped. */
   doubts: Set<string>
@@ -33,7 +48,13 @@ export type ParsedDraft = {
  */
 export function draftFromParsed(parsed: ParsedRecipe): ParsedDraft {
   const lines: DraftLine[] = []
+  const rows: DraftRow[] = []
+  let index = 0
   for (const group of parsed.ingredients ?? []) {
+    const heading = (group.heading ?? '').trim()
+    if (heading && (group.items ?? []).some((item) => (item.raw ?? '').trim())) {
+      rows.push({ kind: 'heading', text: heading })
+    }
     for (const item of group.items ?? []) {
       const raw = (item.raw ?? '').trim()
       if (!raw) continue
@@ -45,12 +66,15 @@ export function draftFromParsed(parsed: ParsedRecipe): ParsedDraft {
         .filter((part) => part !== '' && part !== undefined)
         .join(' ')
         .trim()
-      lines.push({
+      const line: DraftLine = {
         raw,
         quantity,
         item: (item.item ?? fallback.item ?? raw).trim(),
         optional: Boolean(item.optional),
-      })
+      }
+      lines.push(line)
+      rows.push({ kind: 'item', ...line, index })
+      index += 1
     }
   }
 
@@ -58,6 +82,7 @@ export function draftFromParsed(parsed: ParsedRecipe): ParsedDraft {
     title: (parsed.title ?? '').trim(),
     yieldText: (parsed.yield ?? '').trim(),
     lines,
+    rows,
     method: (parsed.steps ?? []).map((step) => step.trim()).filter(Boolean).join('\n'),
     doubts: new Set((parsed.lowConfidenceFields ?? []).map((path) => path.trim()).filter(Boolean)),
   }
@@ -81,10 +106,36 @@ export function countDoubts(draft: ParsedDraft): number {
 }
 
 /**
- * Ingredient groups for saving. The form is a flat list of lines — headings from the page
- * are preserved on the parse but the phase-1 edit screen has never had a way to show them,
- * so they are carried into a single group rather than silently dropped into nothing.
+ * Ingredient groups for saving, from the editor's flat rows. A heading starts a new group;
+ * anything before the first heading is an unnamed one, which is how most pages read.
+ * A heading with nothing under it is dropped rather than saved as an empty section.
  */
+export function groupsFromRows(
+  rows: DraftRow[],
+): { heading?: string; items: { raw: string; optional?: boolean }[] }[] {
+  const groups: { heading?: string; items: { raw: string; optional?: boolean }[] }[] = []
+  let current: { heading?: string; items: { raw: string; optional?: boolean }[] } | null = null
+
+  for (const row of rows) {
+    if (row.kind === 'heading') {
+      const heading = row.text.trim()
+      current = heading ? { heading, items: [] } : { items: [] }
+      groups.push(current)
+      continue
+    }
+    const raw = row.raw.trim()
+    if (!raw) continue
+    if (!current) {
+      current = { items: [] }
+      groups.push(current)
+    }
+    current.items.push({ raw, ...(row.optional ? { optional: true } : {}) })
+  }
+
+  return groups.filter((group) => group.items.length > 0)
+}
+
+/** The flat-list version, kept for the typed-in path that has no headings. */
 export function groupsFromLines(lines: DraftLine[]): { items: { raw: string; optional?: boolean }[] }[] {
   const items = lines
     .map((line) => ({ raw: line.raw.trim(), ...(line.optional ? { optional: true } : {}) }))
