@@ -13,6 +13,21 @@ headings in the edit form, portion scaling and unit display, the comma-first nor
 and the canonical backfill that makes fixing it mean anything, and sharing pages to an
 outside AI.
 
+## Seen in the real registry (2026-08-16)
+
+Loading the 100 starter recipes mints **559** ingredient entries, and searching "stock"
+returns about a dozen. Merging (Settings → Duplicate ingredients) handles the genuine
+duplicates, but some of these are normalizer artifacts and merging is the wrong tool for
+them:
+
+- `beef stock alternatively`, `chicken stock water`, `chicken stock broth` — the line said
+  "or" / "alternatively" and the normalizer kept both halves as one name. It should split on
+  " or " and take the first alternative, the way it already splits on commas.
+- `lea perrin' worcestershire sauce maggi stock cube` — one line listing several products.
+  Probably not worth solving; merging it away is fine.
+- `chicken stock cube` vs `chicken stock` — correctly distinct (a cube is not a liquid), and
+  the derived-products block list already stops `chicken` matching either. Left alone.
+
 ## After phase 4 — the honest gaps
 
 - **The live parse has never been run.** It needs Alisa's own API key, which this project

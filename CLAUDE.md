@@ -126,6 +126,15 @@ Conventions worth keeping:
   comma-segment that still has a name in it** once quantities, units and preparations are
   stripped; where the head survives (the common case) nothing changed. `raw` is untouched
   either way.
+- **`repo.mergeIngredients(from, into)` folds two registry entries into one**, and is the
+  answer to registry noise — 100 starter recipes alone mint 559 entries, about a dozen of
+  them some flavour of "stock". It repoints every affected recipe's `ingredientIndex`, keeps
+  the folded-away name as an **alias** so the next recipe spelled that way resolves straight
+  to the survivor, and ORs the staple flag (un-stapling by accident empties the dinner
+  screen). Recipes are repointed, never deleted; their printed lines and their own
+  `canonical` are untouched. **Never automatic** — `pepper` is not `bell pepper`, so it runs
+  only when she picks both sides in Settings → "Duplicate ingredients". Two taps: fold away,
+  then keep.
 - **`repo.backfillCanonicals()` is how a normalizer fix reaches recipes already saved.**
   `canonical` is derived at write time, so improving the rule only helps recipes written
   afterwards — a fix nobody can apply to their own data is not a fix. It rewrites ONLY

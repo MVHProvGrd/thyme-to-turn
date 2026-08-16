@@ -275,6 +275,57 @@ export async function setStaple(uuid: string, isStaple: boolean): Promise<void> 
 }
 
 /**
+ * Fold one registry entry into another: `chicken broth` into `chicken stock`, `scallion`
+ * into `spring onion`. A hundred real recipes turn one ingredient into four tiles, and four
+ * tiles for one thing makes the dinner grid ask the same question four times.
+ *
+ * NEVER AUTOMATIC. `pepper` is not `bell pepper` and `cream` is not `sour cream`; a merge
+ * that guessed would quietly make the match wrong in a way she could not see. This runs
+ * only when she picks both sides herself.
+ *
+ * Nothing of hers is lost. Recipes are REPOINTED, never deleted: every recipe that used the
+ * old entry now uses the surviving one, and the old name is kept as an alias so the next
+ * recipe that spells it that way resolves straight to the survivor. The printed lines and
+ * each ingredient's own `canonical` are untouched -- the registry is the only thing that
+ * moves. If either side was a staple the survivor stays a staple, because un-stapling by
+ * accident empties the dinner screen.
+ */
+export async function mergeIngredients(
+  fromUuid: string,
+  intoUuid: string,
+): Promise<{ recipesRepointed: number; alias: string } | undefined> {
+  if (fromUuid === intoUuid) return undefined
+  const from = await db.ingredients.get(fromUuid)
+  const into = await db.ingredients.get(intoUuid)
+  if (!from || !into) return undefined
+
+  // The old name, and anything that already pointed at it, now point at the survivor.
+  const aliases = new Set([...into.aliases, ...from.aliases, from.canonical])
+  aliases.delete(into.canonical)
+
+  const affected = await db.recipes.where('ingredientIndex').equals(fromUuid).toArray()
+  for (const recipe of affected) {
+    const ingredientIndex: string[] = []
+    for (const uuid of recipe.ingredientIndex) {
+      const next = uuid === fromUuid ? intoUuid : uuid
+      if (!ingredientIndex.includes(next)) ingredientIndex.push(next)
+    }
+    // Only the index moves; her ingredients, notes and everything else are spread through.
+    await db.recipes.put({ ...recipe, ingredientIndex })
+  }
+
+  await db.ingredients.put({
+    ...into,
+    aliases: [...aliases],
+    isStaple: into.isStaple || from.isStaple,
+  })
+  await db.ingredients.delete(fromUuid)
+  await refreshSeenCounts([intoUuid])
+
+  return { recipesRepointed: affected.length, alias: from.canonical }
+}
+
+/**
  * Re-derive `canonical` and `ingredientIndex` for every recipe already on the device.
  *
  * WHY THIS HAS TO EXIST. `canonical` is derived from `raw` at write time, so improving the

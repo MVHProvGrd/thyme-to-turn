@@ -617,6 +617,22 @@ await page.screenshot({ path: `${OUT}/41-settings-matching.png` })
 await page.getByRole('button', { name: 'Re-check ingredient matching' }).click()
 await page.waitForTimeout(900)
 await page.screenshot({ path: `${OUT}/41b-settings-matching-done.png` })
+// Folding duplicate spellings together. With the starter set loaded the registry is
+// genuinely noisy -- "stock" alone matches about a dozen entries -- which is the point.
+await page.locator('summary', { hasText: 'Duplicate ingredients' }).click()
+await page.waitForTimeout(300)
+await page.getByLabel('Search ingredients to merge').fill('stock')
+await page.waitForTimeout(400)
+await page.getByLabel('Search ingredients to merge').scrollIntoViewIfNeeded()
+await page.screenshot({ path: `${OUT}/43-merge-list.png` })
+await page
+  .getByRole('group', { name: 'Ingredients you can merge' })
+  .getByRole('button')
+  .nth(1)
+  .click()
+await page.waitForTimeout(250)
+await page.screenshot({ path: `${OUT}/44-merge-picked.png` })
+
 await page.getByRole('heading', { name: 'Claude API key' }).scrollIntoViewIfNeeded()
 await page.waitForTimeout(250)
 await page.screenshot({ path: `${OUT}/42-settings-key.png` })

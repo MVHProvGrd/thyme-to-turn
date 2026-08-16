@@ -6,6 +6,7 @@ import Disclosure, { CheckRow } from '../components/Disclosure'
 import { useToast } from '../components/Toast'
 import { exportBackup, importBackup } from '../db/backup'
 import {
+  mergeIngredients,
   backfillCanonicals,
   addStarterRecipes,
   countRecipes,
@@ -51,6 +52,9 @@ export default function Settings() {
   // Read once into local state; api/key.ts is the only thing that touches the secret.
   const [apiKey, setApiKeyValue] = useState(() => getApiKey())
   const [stapleQuery, setStapleQuery] = useState('')
+  const [mergeQuery, setMergeQuery] = useState('')
+  /** The entry she picked first: the one that will be folded away. */
+  const [mergeFrom, setMergeFrom] = useState<string | null>(null)
   const [newStaple, setNewStaple] = useState('')
 
   /**
@@ -77,6 +81,30 @@ export default function Settings() {
     }
   }
 
+  /**
+   * Two taps: the spelling to fold away, then the one to keep. Never automatic -- `pepper`
+   * is not `bell pepper`, and a merge the app guessed would make the dinner screen quietly
+   * wrong.
+   */
+  async function doMerge(intoUuid: string) {
+    const fromUuid = mergeFrom
+    if (!fromUuid || fromUuid === intoUuid) return
+    const rows = ingredients ?? []
+    const from = rows.find((row) => row.uuid === fromUuid)
+    const into = rows.find((row) => row.uuid === intoUuid)
+    if (!from || !into) return
+    if (!confirm(`Treat "${from.canonical}" as "${into.canonical}" from now on?`)) return
+
+    const result = await mergeIngredients(fromUuid, intoUuid)
+    setMergeFrom(null)
+    if (!result) return
+    toast(
+      result.recipesRepointed === 1
+        ? `Merged. 1 recipe now uses "${into.canonical}".`
+        : `Merged. ${result.recipesRepointed} recipes now use "${into.canonical}".`,
+    )
+  }
+
   async function addStaple() {
     const name = newStaple
     setNewStaple('')
@@ -89,6 +117,14 @@ export default function Settings() {
    * and a search for anything else.
    */
   const staples = (ingredients ?? []).filter((entry) => entry.isStaple)
+  /**
+   * Merge candidates: what she searched for, else the most-used entries. Sorted by
+   * `seenCount` already, so the noisiest duplicates surface without her hunting.
+   */
+  const mergeQ = fold(mergeQuery.trim())
+  const mergeCandidates = mergeQ
+    ? (ingredients ?? []).filter((entry) => entry.canonical.includes(mergeQ)).slice(0, 20)
+    : (ingredients ?? []).slice(0, 12)
   const q = fold(stapleQuery)
   const suggestions = q
     ? (ingredients ?? []).filter((entry) => !entry.isStaple && entry.canonical.includes(q))
@@ -301,6 +337,58 @@ export default function Settings() {
             <p className="font-mono text-[11px] text-ink-soft">
               Showing the ten most used. Search for anything else.
             </p>
+          ) : null}
+        </Disclosure>
+
+        <Disclosure title="Duplicate ingredients" note={`${(ingredients ?? []).length} known`}>
+          <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+            A hundred recipes turn one thing into four: chicken stock, chicken broth, homemade
+            chicken stock. The dinner screen then asks about the same ingredient four times.
+            Tap the spelling you want to fold away, then the one to keep. Your recipes are not
+            changed — they just point at the one entry afterwards, and the old spelling keeps
+            working.
+          </p>
+          <p className="font-mono text-[11px] leading-[1.6] text-copper">
+            {mergeFrom
+              ? `Now tap the one to KEEP. "${
+                  (ingredients ?? []).find((row) => row.uuid === mergeFrom)?.canonical ?? ''
+                }" will fold into it.`
+              : 'Nothing picked yet.'}
+          </p>
+
+          <input
+            type="search"
+            value={mergeQuery}
+            onChange={(event) => setMergeQuery(event.target.value)}
+            placeholder="search your ingredients…"
+            aria-label="Search ingredients to merge"
+            className="min-h-[44px] w-full rounded-sm border border-rule bg-paper px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+          />
+
+          <div className="flex flex-col" role="group" aria-label="Ingredients you can merge">
+            {mergeCandidates.map((entry) => (
+              <button
+                key={entry.uuid}
+                type="button"
+                onClick={() => (mergeFrom ? void doMerge(entry.uuid) : setMergeFrom(entry.uuid))}
+                aria-label={`${entry.canonical}, used in ${entry.seenCount}`}
+                className={`flex min-h-[44px] items-center justify-between gap-3 border-b border-rule px-1 text-left font-mono text-[13px] ${
+                  entry.uuid === mergeFrom ? 'text-copper' : 'text-ink'
+                }`}
+              >
+                <span>{entry.canonical}</span>
+                <span className="shrink-0 text-[11px] text-ink-soft">{entry.seenCount}</span>
+              </button>
+            ))}
+            {mergeCandidates.length === 0 ? (
+              <p className="font-mono text-[11px] text-ink-soft">Nothing to show.</p>
+            ) : null}
+          </div>
+
+          {mergeFrom ? (
+            <Button variant="secondary" onClick={() => setMergeFrom(null)}>
+              Cancel
+            </Button>
           ) : null}
         </Disclosure>
 
