@@ -11,7 +11,7 @@ import { useFlip } from '../components/useFlip'
 import { listIngredients, listRecipes } from '../db/repo'
 import { emojiFor } from '../lib/emoji'
 import { fold } from '../lib/ingredients'
-import { cycleState, matchPantry, nextQuestions } from '../lib/pantry'
+import { matchPantry, nextQuestions } from '../lib/pantry'
 import type { IngredientState, Match } from '../lib/pantry'
 import type { IngredientEntry } from '../lib/types'
 import { prefersReducedMotion } from '../platform/motion'
@@ -24,9 +24,15 @@ import { readSession, writeSession } from '../platform/prefs'
  * re-ranks under her thumb, synchronously, on every tap. No search button, no end state —
  * she stops when the answer is good enough.
  *
- * Two filters, both live at once. Every tile is `unknown` / `dontHave` / `have`, and
- * `unknown` means unknown. Both counts still exist and still rank the results — but only
- * `missing` is printed. Alisa asked for the `not sure` line to come off the card
+ * Two filters, both live at once, now with a tab each (Alisa, 2026-08-16 — the tri-state
+ * tile cycle meant up to three taps to say one thing). The tab decides what a tap MEANS;
+ * the tile still renders all three states. One tap marks, a second tap on the same tile
+ * clears it. An ingredient already marked in one tab is not offered as a question in the
+ * other — but a search shows everything, in whatever colour it actually is, so she can
+ * always find a thing and change her mind about it.
+ *
+ * Every tile is still `unknown` / `dontHave` / `have`, and `unknown` still means unknown.
+ * Both counts still exist and still rank the results — but only `missing` is printed. Alisa asked for the `not sure` line to come off the card
  * (2026-08-16): standing at the fridge she reads what she is out of, and a list of things
  * she never mentioned was noise. The distinction is now carried by the group she is in,
  * not by a label.
@@ -37,6 +43,24 @@ import { readSession, writeSession } from '../platform/prefs'
 
 type Marks = Record<string, IngredientState>
 
+/** The two tabs. `leaf` is a marker colour only — it fails 4.5:1 as text, so Have reads thyme. */
+type MarkTab = 'dontHave' | 'have'
+
+const MARK_TABS: { state: MarkTab; label: string; groupLabel: string; activeClass: string }[] = [
+  {
+    state: 'dontHave',
+    label: 'Don\u2019t have',
+    groupLabel: 'Ingredients you are out of',
+    activeClass: 'border-copper font-semibold text-copper',
+  },
+  {
+    state: 'have',
+    label: 'Have',
+    groupLabel: 'Ingredients you have',
+    activeClass: 'border-leaf font-semibold text-thyme',
+  },
+]
+
 const QUESTIONS = 12
 const ENOUGH_RECIPES = 15
 
@@ -46,6 +70,9 @@ export default function Dinner() {
   const registry = useLiveQuery(listIngredients, [], undefined)
 
   const [marks, setMarks] = useState<Marks>(() => readSession('marks', {}))
+  // Which tab is open decides what a tap means. `dontHave` leads: she is answering "what
+  // am I out of", which has a three-item answer, where "what do I have" is homework.
+  const [tab, setTab] = useState<MarkTab>(() => readSession('markTab', 'dontHave'))
   const [query, setQuery] = useState('')
 
   function updateMarks(next: Marks) {
@@ -59,6 +86,16 @@ export default function Dinner() {
     if (state === 'unknown') delete next[uuid]
     else next[uuid] = state
     updateMarks(next)
+  }
+
+  function selectTab(next: MarkTab) {
+    setTab(next)
+    writeSession('markTab', next)
+  }
+
+  /** One tap says it. Tapping the same tile again takes it back to unknown. */
+  function tapTile(uuid: string) {
+    setMark(uuid, (marks[uuid] ?? 'unknown') === tab ? 'unknown' : tab)
   }
 
   function reset() {
@@ -78,7 +115,13 @@ export default function Dinner() {
   const byUuid = useMemo(() => new Map((registry ?? []).map((e) => [e.uuid, e])), [registry])
   const byCanonical = useMemo(() => new Map((registry ?? []).map((e) => [e.canonical, e])), [registry])
 
-  /* The grid: what she has answered, then the most useful questions — or a name search. */
+  /*
+   * The grid. Searching escapes the tabs entirely: it shows every ingredient by that name
+   * in whatever state it is already in, so she can find a thing and change her mind about
+   * it from either tab. Otherwise it is what she has marked IN THIS TAB, then the most
+   * useful questions — and `nextQuestions` already skips anything marked either way, which
+   * is what keeps an ingredient out of the tab it doesn't belong to.
+   */
   const tiles = useMemo<IngredientEntry[]>(() => {
     if (!registry) return []
     const q = fold(query)
@@ -89,12 +132,12 @@ export default function Dinner() {
     }
     const answered = Object.keys(marks).flatMap((uuid) => {
       const entry = byUuid.get(uuid)
-      return entry && !entry.isStaple ? [entry] : []
+      return entry && !entry.isStaple && marks[uuid] === tab ? [entry] : []
     })
     // Live candidates: what she might still cook — the recipes actually listed below.
     const live = matches.filter((m) => m.missing.length <= 1)
     return [...answered, ...nextQuestions(live, registry, marks, QUESTIONS)]
-  }, [registry, query, marks, matches, byUuid])
+  }, [registry, query, marks, matches, byUuid, tab])
 
   const flipRef = useFlip<HTMLDivElement>(!prefersReducedMotion())
 
@@ -148,15 +191,38 @@ export default function Dinner() {
             />
           </div>
 
-          <div className="border-b border-rule px-5 pb-[10px] pt-[14px]">
-            <div role="group" aria-label="Ingredients" className="flex flex-wrap gap-2">
+          <div className="border-b border-rule px-5 pb-[10px] pt-3">
+            <div role="tablist" aria-label="What are you marking?" className="flex">
+              {MARK_TABS.map((entry) => {
+                const active = tab === entry.state
+                return (
+                  <button
+                    key={entry.state}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => selectTab(entry.state)}
+                    className={`min-h-[44px] flex-1 border-b-2 font-mono text-[11px] uppercase tracking-[0.08em] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-thyme ${
+                      active ? entry.activeClass : 'border-rule font-normal text-ink-soft'
+                    }`}
+                  >
+                    {entry.label}
+                  </button>
+                )
+              })}
+            </div>
+            <div
+              role="group"
+              aria-label={query ? 'Ingredients by name' : MARK_TABS.find((t) => t.state === tab)!.groupLabel}
+              className="mt-3 flex flex-wrap gap-2"
+            >
               {tiles.map((entry) => (
                 <Tile
                   key={entry.uuid}
                   name={entry.canonical}
                   emoji={emojiFor(entry.canonical)}
                   state={marks[entry.uuid] ?? 'unknown'}
-                  onTap={() => setMark(entry.uuid, cycleState(marks[entry.uuid] ?? 'unknown'))}
+                  onTap={() => tapTile(entry.uuid)}
                 />
               ))}
               {tiles.length === 0 && query ? (

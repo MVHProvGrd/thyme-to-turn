@@ -200,19 +200,34 @@ before calling.
 The point of the app. Two ways in, one engine:
 
 - **Two filters, both live at once — no mode toggle.** Every ingredient is
-  `have` / `dontHave` / `unknown` for the session. Tapping a tile cycles
-  `unknown → dontHave → have → unknown` (`dontHave` first — ruling out is the primary
-  gesture); the `+` on a card's missing chip sets `have`. The text field only filters the
-  tile grid — it never searches recipes and never sets a mark by itself. Do NOT build two
+  `have` / `dontHave` / `unknown` for the session. Two **tabs** above the grid decide what
+  a tap means — `Don't have` (copper, default, because ruling out is the primary gesture)
+  and `Have` (leaf underline, thyme text — `leaf` never carries text). One tap marks; a
+  second tap on the same tile clears it back to `unknown`. The `+` on a card's missing chip
+  sets `have`. Replaced the tri-state tap cycle on 2026-08-16 — Alisa found up to three
+  taps to say one thing intolerable, and `cycleState` is gone with it. Still ONE state
+  model and ONE match function: the tabs are an input method, not a mode. Do NOT build two
   screens, two match functions, or a direction picker.
+- **A tile marked in one tab is not offered as a question in the other** — `nextQuestions`
+  already skips anything marked either way, and the answered row is filtered to the open
+  tab. **Searching escapes the tabs**: typing a name shows every match in whatever state it
+  is actually in, so she can always find a thing and change her mind from either tab.
+  The text field only filters the tile grid — it never searches recipes.
 - **`unknown` means unknown.** Never score an unmarked ingredient as missing. `dontHave`
   is reliable *and* complete (she knows what she's out of); `have` is reliable but
   *incomplete* (three typed items ≠ an empty kitchen). Conflating them is the bug that
   makes the screen untrustworthy.
-- **Two counts per recipe, never one:** `missing` (ruled out — hard) and `notSure`
-  (unmentioned — soft). Sort by `missing`, then `notSure`, then coverage, then title.
-  **A `have` mark must never increase any recipe's `missing` count** — that's the
-  regression test in `pantry.test.ts`.
+- **Three counts per recipe:** `confirmed` (she has it), `missing` (ruled out — hard) and
+  `notSure` (unmentioned — soft). **A `have` mark must never increase any recipe's
+  `missing` count** — that's the regression test in `pantry.test.ts`.
+- **Ranking order: fewest `missing`, then MOST `confirmed`, then fewest `notSure`, then
+  title.** The `confirmed` key was learned the hard way (Alisa, 2026-08-16): with `notSure`
+  first after `missing`, "fewest unknowns" means "simplest recipe", so marking beef, onion
+  and carrot as `have` left a five-line chicken recipe on top and her three marks did
+  nothing she could see — "so...wtf". Marking what she has is a statement about what she
+  wants to cook **with**, and the ranking has to answer it. At cold start nothing is
+  confirmed, so the key is inert and simplest-first is preserved exactly. `coverage` is no
+  longer a sort key — once the other three tie it is arithmetically forced to tie too.
 - **`notSure` ranks, it does not print.** Alisa asked for the `not sure: …` line to come
   off the result card (2026-08-16): at the fridge she reads what she is *out of*, and a
   list of things she never mentioned was noise. The card shows `missing:` chips only; the

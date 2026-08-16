@@ -7,9 +7,10 @@ import type { IngredientState } from '../lib/pantry'
  * what a chip means. So the state is never colour alone: `have` carries a ✓, `dontHave` a
  * strikethrough. That is what makes the grid usable for a red-green colourblind cook.
  *
- * The chip owns no state. The screen decides what a tap does (on the dinner screen it
- * cycles unknown → dontHave → have → unknown; in Settings it toggles a staple), because
- * these taps mean different things in different places. Spec: HANDOFF.md §2.
+ * The chip owns no state. The screen decides what a tap does — on the dinner screen the
+ * open tab decides whether a tap means "out of it" or "got it", in Settings it toggles a
+ * staple — because these taps mean different things in different places. Spec: HANDOFF.md
+ * §2, minus the tri-state cycle (see docs/design/README.md).
  */
 
 const STATE_CLASS: Record<IngredientState, string> = {

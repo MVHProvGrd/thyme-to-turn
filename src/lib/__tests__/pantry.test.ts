@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cycleState, matchPantry, nextQuestions, stateFor } from '../pantry'
+import { matchPantry, nextQuestions, stateFor } from '../pantry'
 import type { IngredientState } from '../pantry'
 import type { IngredientEntry, Recipe } from '../types'
 
@@ -122,6 +122,29 @@ describe('matchPantry: what counts as required', () => {
     expect(matches.map((m) => m.recipe.title)).toEqual(['Lentil soup'])
   })
 
+  it('ranks by what she HAS, not by what is simplest — the beef-stew case', () => {
+    // Alisa, 2026-08-16: marking beef/onion/carrot left a five-line chicken recipe on top,
+    // because "fewest unknowns" is "simplest recipe" and her marks did nothing visible.
+    const registry = [
+      entry('beef'), entry('onion'), entry('carrot'), entry('stock'),
+      entry('potato'), entry('celery'), entry('bay leaf'), entry('chicken'), entry('lemon'),
+    ]
+    const stew = recipe('Beef stew', ['beef', 'onion', 'carrot', 'stock', 'potato', 'celery', 'bay leaf'], registry)
+    const roast = recipe('Roast chicken', ['chicken', 'lemon'], registry)
+    const marks: Record<string, IngredientState> = {
+      'id:beef': 'have', 'id:onion': 'have', 'id:carrot': 'have',
+    }
+    const ranked = matchPantry([roast, stew], marks, registry)
+    expect(ranked.map((m) => m.recipe.title)).toEqual(['Beef stew', 'Roast chicken'])
+    expect(ranked[0].confirmed).toEqual(['beef', 'onion', 'carrot'])
+    expect(ranked[1].confirmed).toEqual([])
+    // The simplest recipe still wins when she has said nothing — the cold-start default.
+    expect(matchPantry([roast, stew], {}, registry).map((m) => m.recipe.title)).toEqual([
+      'Roast chicken',
+      'Beef stew',
+    ])
+  })
+
   it('reports coverage as confirmed / required', () => {
     const [m] = matchPantry([roastChicken], states({ chicken: 'have', fennel: 'have' }), REGISTRY)
     expect(m.coverage).toBeCloseTo(2 / 3)
@@ -230,7 +253,7 @@ describe('matchPantry: the two filters, live at once', () => {
     }
   })
 
-  it('sorts by missing, then notSure, then coverage desc, then title', () => {
+  it('sorts by missing, then MOST confirmed, then fewest notSure, then title', () => {
     const marks = states({ chicken: 'have', fennel: 'have', bread: 'dontHave', cream: 'dontHave' })
     const matches = matchPantry(RECIPES, marks, REGISTRY)
     expect(matches.map((m) => [m.recipe.title, m.missing.length, m.notSure.length])).toEqual([
@@ -290,14 +313,6 @@ describe('nextQuestions: the Twenty Questions move', () => {
 
   it('returns nothing when there are no candidates', () => {
     expect(nextQuestions([], REGISTRY, {})).toEqual([])
-  })
-})
-
-describe('cycleState', () => {
-  it('goes unknown -> dontHave -> have -> unknown; ruling out is the first gesture', () => {
-    expect(cycleState('unknown')).toBe('dontHave')
-    expect(cycleState('dontHave')).toBe('have')
-    expect(cycleState('have')).toBe('unknown')
   })
 })
 

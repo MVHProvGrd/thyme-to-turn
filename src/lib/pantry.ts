@@ -28,19 +28,14 @@ export type IngredientState = 'have' | 'dontHave' | 'unknown'
 
 export type Match = {
   recipe: Recipe
+  /** Canonical names she said she HAS. What the recipe makes use of. */
+  confirmed: string[]
   /** Canonical names she ruled out. Hard — she told us. */
   missing: string[]
   /** Canonical names she never mentioned. Soft — she has forty things in that kitchen. */
   notSure: string[]
-  /** confirmed / required, for tie-breaking. 1 when nothing is required. */
+  /** confirmed / required. 1 when nothing is required. Reported, not sorted on. */
   coverage: number
-}
-
-/** Tap order on a tile. `dontHave` first: ruling things out is the primary gesture. */
-export function cycleState(state: IngredientState): IngredientState {
-  if (state === 'unknown') return 'dontHave'
-  if (state === 'dontHave') return 'have'
-  return 'unknown'
 }
 
 function isMarked(state: IngredientState | undefined): state is 'have' | 'dontHave' {
@@ -147,8 +142,20 @@ function optionalOnly(recipe: Recipe): Set<string> {
 
 /**
  * Rank every recipe against tonight's marks. Never filters — a strict filter returns
- * nothing most nights. Sorted by `missing`, then `notSure`, then coverage (desc), then
- * title, so the order is stable and explainable.
+ * nothing most nights.
+ *
+ * Order: fewest `missing`, then MOST `confirmed`, then fewest `notSure`, then title.
+ *
+ * The `confirmed` key is load-bearing and was learned the hard way (Alisa, 2026-08-16):
+ * with `notSure` as the first key after `missing`, "fewest unknowns" means "simplest
+ * recipe", so marking beef, onion and carrot as HAVE left a five-line chicken recipe at
+ * the top and her three marks did nothing she could see. Marking what she has is a
+ * statement about what she wants to cook WITH; the ranking has to answer it. At cold
+ * start nothing is confirmed, so this key is inert and the old simplest-first default is
+ * exactly preserved.
+ *
+ * `coverage` is no longer a sort key: once missing, confirmed and notSure all tie it is
+ * arithmetically forced to tie too, so it could never break anything.
  *
  * A recipe whose `ingredientIndex` names a uuid the registry doesn't have is left out
  * entirely: silence beats a confident wrong answer.
@@ -189,14 +196,14 @@ export function matchPantry(
     const required = confirmed.length + missing.length + notSure.length
     const coverage = required === 0 ? 1 : confirmed.length / required
 
-    matches.push({ recipe, missing, notSure, coverage })
+    matches.push({ recipe, confirmed, missing, notSure, coverage })
   }
 
   matches.sort(
     (a, b) =>
       a.missing.length - b.missing.length ||
+      b.confirmed.length - a.confirmed.length ||
       a.notSure.length - b.notSure.length ||
-      b.coverage - a.coverage ||
       a.recipe.title.localeCompare(b.recipe.title),
   )
   return matches
