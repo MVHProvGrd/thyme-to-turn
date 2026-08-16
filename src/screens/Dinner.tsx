@@ -265,7 +265,7 @@ export default function Dinner() {
         </div>
       ) : (
         <>
-          {catChoices.length > 0 || tagChoices.length > 0 ? (
+          {(categories ?? []).length > 0 || (tagVocabulary ?? []).length > 0 ? (
             <div className="border-b border-rule px-5 pb-3 pt-3">
               {/*
                 Two menus rather than two rows of chips. Categories and tags together run to
@@ -274,7 +274,7 @@ export default function Dinner() {
                 phone. Closed, they cost one 44px row and still say what is on.
               */}
               <div className="flex gap-2">
-                {catChoices.length > 0 ? (
+                {(categories ?? []).length > 0 ? (
                   <MenuButton
                     label="Category"
                     value={labels.category ?? null}
@@ -282,7 +282,7 @@ export default function Dinner() {
                     onTap={() => setMenu(menu === 'category' ? null : 'category')}
                   />
                 ) : null}
-                {tagChoices.length > 0 ? (
+                {(tagVocabulary ?? []).length > 0 ? (
                   <MenuButton
                     label="Tags"
                     value={(labels.tags ?? []).length ? `${(labels.tags ?? []).length} on` : null}
@@ -298,6 +298,21 @@ export default function Dinner() {
                   role="group"
                   aria-label={menu === 'category' ? 'Filter by category' : 'Filter by tag'}
                 >
+                  {(menu === 'category' ? catChoices : tagChoices).length === 0 ? (
+                    /*
+                      Offering a chip that can only return nothing is worse than no chip —
+                      but hiding the whole control was worse still: it took the feature off
+                      the screen entirely and gave no hint that labelling a recipe would
+                      bring it back (Mike, 2026-08-16, "I need a way to also filter by Tags
+                      and Categories"). So the menu is always here, and when there is
+                      nothing to offer it says so and says where to fix it.
+                    */
+                    <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+                      {menu === 'category'
+                        ? 'No recipe has a category yet. Open one, tap Edit, and pick a category — then it shows up here.'
+                        : 'No recipe has a tag yet. Open one, tap Edit, and pick a tag — then it shows up here.'}
+                    </p>
+                  ) : null}
                   {(menu === 'category' ? catChoices : tagChoices).map((name) => {
                     const on =
                       menu === 'category'
