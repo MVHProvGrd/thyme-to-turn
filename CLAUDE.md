@@ -115,8 +115,8 @@ screenshot back with the Read tool — don't declare a UI change done from the d
 `shot.mjs` in the repo root does this: it types four recipes in through the real form at
 390×844, then shoots the list, edit, detail, cook mode, settings, a post-reload check, and
 the dinner screen — cold start, three things tapped out, the card with both `missing` and
-`not sure`, the `+` flip, everything ruled out, "only what I listed", and staples in
-Settings. Extend it when a screen lands. Output goes to `shots/`, which is gitignored.
+`not sure`, the detail rows saying `missing` / `✓`, the `+` flip, everything ruled out,
+"only what I listed", and staples in Settings. Extend it when a screen lands. Output goes to `shots/`, which is gitignored.
 
 On a laptop without the sandbox Chromium, `shot.mjs` falls back to the installed Google
 Chrome (`channel: 'chrome'`). Still never `playwright install`.
@@ -222,6 +222,10 @@ The point of the app. Two ways in, one engine:
 - **A recipe with unresolved ingredient IDs is excluded from "ready to cook"** — never
   assumed feasible. Silence beats a confident wrong answer. (`matchPantry` drops it from
   the results entirely; it still counts in the "N recipes" tally.)
+- **The recipe detail reads the same marks** (`stateFor` in `pantry.ts`): a row she ruled
+  out says `missing` in copper, a row she confirmed gets a leaf `✓`. Same engine, same
+  alias/prefix resolution — never a second opinion. Detail reads the session marks once
+  on open and never writes them.
 - **The re-rank is the only animation in the app**: `components/useFlip.ts` slides result
   cards ~180ms with the Web Animations API, keyed by `data-flip-key`, and is switched off
   by `platform/motion.ts` `prefersReducedMotion()`. Nothing else moves.

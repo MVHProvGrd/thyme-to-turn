@@ -4,9 +4,12 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import Screen from '../components/Screen'
 import Button from '../components/Button'
 import SourceLine from '../components/SourceLine'
-import { getRecipe } from '../db/repo'
+import { getRecipe, listIngredients } from '../db/repo'
 import { formatUnit } from '../lib/ingredients'
-import { readPref, writePref } from '../platform/prefs'
+import { stateFor } from '../lib/pantry'
+import type { IngredientState } from '../lib/pantry'
+import type { Ingredient, IngredientEntry } from '../lib/types'
+import { readPref, readSession, writePref } from '../platform/prefs'
 
 /**
  * Cook from it, hands full.
@@ -22,6 +25,11 @@ export default function RecipeDetail() {
   // the dinner screen passes `{ from: '/dinner' }`; anything else lands on the list.
   const from = (location.state as { from?: string } | null)?.from ?? '/recipes'
   const recipe = useLiveQuery(() => getRecipe(uuid), [uuid], undefined)
+  const registry = useLiveQuery(listIngredients, [], undefined)
+
+  // Tonight's marks from the dinner screen, so the row she is out of says so here too.
+  // Read once on open — this screen never writes them.
+  const [marks] = useState<Record<string, IngredientState>>(() => readSession('marks', {}))
 
   const [cook, setCook] = useState(() => readPref('cookMode', false))
   const [done, setDone] = useState<Record<string, boolean>>(() => readPref(`done:${uuid}`, {}))
@@ -111,18 +119,30 @@ export default function RecipeDetail() {
             <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
               {group.heading ?? 'Ingredients'}
             </h2>
-            <ul className="mt-3 grid grid-cols-[88px_1fr] gap-x-[10px] gap-y-[9px]">
-              {group.items.map((item, itemIndex) => (
-                <li key={itemIndex} className="col-span-2 grid grid-cols-subgrid">
-                  <span className={`font-mono text-ink-soft ${cook ? 'text-[15px]' : 'text-[13px]'}`}>
-                    {formatQuantity(item.quantity, item.unit)}
-                  </span>
-                  <span className={`font-mono text-ink ${cook ? 'text-[15px]' : 'text-[13px]'}`}>
-                    {item.item ?? item.raw}
-                    {item.note ? <span className="text-ink-soft">, {item.note}</span> : null}
-                  </span>
-                </li>
-              ))}
+            <ul className="mt-3 grid grid-cols-[88px_1fr_auto] gap-x-[10px] gap-y-[9px]">
+              {group.items.map((item, itemIndex) => {
+                const state = markFor(item, marks, registry ?? [])
+                return (
+                  <li key={itemIndex} className="col-span-3 grid grid-cols-subgrid">
+                    <span className={`font-mono text-ink-soft ${cook ? 'text-[15px]' : 'text-[13px]'}`}>
+                      {formatQuantity(item.quantity, item.unit)}
+                    </span>
+                    <span className={`font-mono text-ink ${cook ? 'text-[15px]' : 'text-[13px]'}`}>
+                      {item.item ?? item.raw}
+                      {item.note ? <span className="text-ink-soft">, {item.note}</span> : null}
+                    </span>
+                    <span className={`font-mono ${cook ? 'text-[15px]' : 'text-[13px]'}`}>
+                      {state === 'have' ? (
+                        <span className="text-leaf" aria-label="have">
+                          ✓
+                        </span>
+                      ) : state === 'dontHave' ? (
+                        <span className="text-copper">missing</span>
+                      ) : null}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           </section>
         ))}
@@ -167,6 +187,23 @@ export default function RecipeDetail() {
       </div>
     </Screen>
   )
+}
+
+/**
+ * The trailing marker on an ingredient row: what tonight's marks say about this line,
+ * through the same alias/prefix resolution the dinner screen used. Staples never carry
+ * one — they were never in the question.
+ */
+function markFor(
+  item: Ingredient,
+  marks: Record<string, IngredientState>,
+  registry: IngredientEntry[],
+): IngredientState {
+  const canonical = item.canonical
+  if (!canonical || registry.length === 0) return 'unknown'
+  const entry = registry.find((e) => e.canonical === canonical || e.aliases.includes(canonical))
+  if (!entry || entry.isStaple) return 'unknown'
+  return stateFor(entry, marks, registry)
 }
 
 /** Keeps the 88px column honest: "1½ cups", "2", "" — never "undefined undefined". */

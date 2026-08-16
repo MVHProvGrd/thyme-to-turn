@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cycleState, matchPantry, nextQuestions } from '../pantry'
+import { cycleState, matchPantry, nextQuestions, stateFor } from '../pantry'
 import type { IngredientState } from '../pantry'
 import type { IngredientEntry, Recipe } from '../types'
 
@@ -317,5 +317,18 @@ describe('cycleState', () => {
     expect(cycleState('unknown')).toBe('dontHave')
     expect(cycleState('dontHave')).toBe('have')
     expect(cycleState('have')).toBe('unknown')
+  })
+})
+
+describe('stateFor: the detail screen asks the same engine', () => {
+  const byName = (name: string) => REGISTRY.find((e) => e.canonical === name)!
+
+  it('answers direct, alias and prefix marks exactly as matchPantry does', () => {
+    const marks = { ...states({ garlic: 'dontHave', chicken: 'have' }), 'id:spring-onion-separate': 'dontHave' as const }
+    expect(stateFor(byName('garlic'), marks, REGISTRY)).toBe('dontHave')
+    expect(stateFor(byName('chicken thigh'), marks, REGISTRY)).toBe('have')
+    expect(stateFor(byName('scallion'), marks, REGISTRY)).toBe('dontHave')
+    expect(stateFor(byName('chickpea'), marks, REGISTRY)).toBe('unknown')
+    expect(stateFor(byName('onion'), marks, REGISTRY)).toBe('unknown')
   })
 })

@@ -152,9 +152,12 @@ const gratin = page.locator('article', { hasText: 'Fennel gratin' })
 await gratin.scrollIntoViewIfNeeded()
 await gratin.screenshot({ path: `${OUT}/10-dinner-card.png` })
 
-// Marks survive opening a recipe and coming back — session state, not a saved pantry.
+// On the recipe itself, the row she is out of says "missing" — same marks, same answer.
 await gratin.getByRole('button', { name: /Fennel gratin/ }).click()
 await page.waitForSelector('text=Method')
+await page.locator('li', { hasText: 'cream' }).getByText('missing').waitFor()
+await page.screenshot({ path: `${OUT}/10b-detail-missing.png` })
+// Marks survive opening a recipe and coming back — session state, not a saved pantry.
 await page.getByRole('button', { name: '← Back' }).click()
 await page.waitForURL(/#\/dinner/)
 await page.getByRole('button', { name: 'garlic, ruled out' }).waitFor()
@@ -164,6 +167,13 @@ await page.getByRole('button', { name: 'add cream to what you have' }).click()
 await page.waitForTimeout(250)
 await page.getByRole('button', { name: 'cream, have' }).waitFor()
 await page.screenshot({ path: `${OUT}/11-dinner-plus.png` })
+
+// ...and on the recipe, that row now carries a ✓ instead.
+await page.locator('article', { hasText: 'Fennel gratin' }).getByRole('button', { name: /Fennel gratin/ }).click()
+await page.locator('li', { hasText: 'cream' }).getByLabel('have').waitFor()
+await page.screenshot({ path: `${OUT}/11b-detail-have.png` })
+await page.getByRole('button', { name: '← Back' }).click()
+await page.waitForURL(/#\/dinner/)
 
 // Everything ruled out: the card says so and offers Reset. Never a dead end.
 await page.getByRole('button', { name: 'Reset' }).first().click()

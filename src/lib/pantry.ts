@@ -108,6 +108,29 @@ function resolveState(
 }
 
 /**
+ * What tonight's marks say about one registry entry, after alias and prefix resolution.
+ * The recipe detail screen uses this to put a ✓ or the word "missing" on an ingredient
+ * row — the same answer the dinner screen gave, never a second opinion.
+ */
+export function stateFor(
+  entry: IngredientEntry,
+  states: Record<string, IngredientState>,
+  registry: IngredientEntry[],
+): IngredientState {
+  return resolveState(entry, states, collectMarks(states, registry))
+}
+
+function collectMarks(states: Record<string, IngredientState>, registry: IngredientEntry[]): Mark[] {
+  const byUuid = new Map(registry.map((e) => [e.uuid, e]))
+  const marks: Mark[] = []
+  for (const [uuid, state] of Object.entries(states)) {
+    const entry = byUuid.get(uuid)
+    if (entry && isMarked(state)) marks.push({ entry, state, names: namesOf(entry) })
+  }
+  return marks
+}
+
+/**
  * The names in a recipe that appear ONLY as optional lines. A garnish never blocks
  * feasibility — but if the same ingredient is also a real line, it's required.
  */
@@ -140,11 +163,7 @@ export function matchPantry(
   opts: MatchOptions = {},
 ): Match[] {
   const byUuid = new Map(registry.map((e) => [e.uuid, e]))
-  const marks: Mark[] = []
-  for (const [uuid, state] of Object.entries(states)) {
-    const entry = byUuid.get(uuid)
-    if (entry && isMarked(state)) marks.push({ entry, state, names: namesOf(entry) })
-  }
+  const marks = collectMarks(states, registry)
 
   const matches: Match[] = []
 
