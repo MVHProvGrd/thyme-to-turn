@@ -25,8 +25,8 @@ export default function Screen({
   header?: ReactNode
   children: ReactNode
   tabs?: boolean
-  /** Return false to cancel a tab tap — for screens holding unsaved work. */
-  onLeave?: () => boolean
+  /** Return false to cancel a tab tap — for screens holding unsaved work. May ask. */
+  onLeave?: () => boolean | Promise<boolean>
 }) {
   const { pathname } = useLocation()
   return (

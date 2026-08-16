@@ -5,6 +5,7 @@ import Screen from '../components/Screen'
 import Button from '../components/Button'
 import { Input, Label, Textarea } from '../components/Field'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import Tile from '../components/Tile'
 import { PARSE_MODEL } from '../api/claude'
 import { RECIPE_SCHEMA_VERSION } from '../api/prompts'
@@ -62,6 +63,7 @@ export default function RecipeEdit() {
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
+  const ask = useConfirm()
 
   /*
    * ★ THE VERIFICATION GATE. A parse arrives here in navigation state and NOTHING has been
@@ -95,13 +97,25 @@ export default function RecipeEdit() {
    * work. A parse is the dangerous case: it lives in navigation state and is gone the
    * moment this screen unmounts, so an unsaved parse always asks, typed or not.
    */
-  function confirmLeave(): boolean {
+  async function confirmLeave(): Promise<boolean> {
     if (saving) return true
     if (fromParse) {
-      return confirm("Leave without saving? What was read from the page hasn't been saved yet.")
+      return ask({
+        title: 'Leave without saving?',
+        body: "What was read from the page hasn't been saved yet, and it is not stored anywhere — leaving loses it.",
+        confirmLabel: 'Leave',
+        cancelLabel: 'Stay here',
+        destructive: true,
+      })
     }
     if (!dirty) return true
-    return confirm('Leave without saving? Your changes will be lost.')
+    return ask({
+      title: 'Leave without saving?',
+      body: 'Your changes to this recipe will be lost.',
+      confirmLabel: 'Leave',
+      cancelLabel: 'Stay here',
+      destructive: true,
+    })
   }
 
   const books = useLiveQuery(listBooks, [], undefined)
@@ -219,7 +233,13 @@ export default function RecipeEdit() {
   async function remove() {
     if (!existing) return
     // Destructive, so it asks — and it says exactly what it will do.
-    if (!confirm(`Delete "${existing.title}"? This can't be undone.`)) return
+    const ok = await ask({
+      title: `Delete "${existing.title}"?`,
+      body: "This can't be undone, and there is no other copy of it.",
+      confirmLabel: 'Delete it',
+      destructive: true,
+    })
+    if (!ok) return
     await deleteRecipe(existing.uuid)
     toast('Deleted.')
     navigate('/recipes', { replace: true })

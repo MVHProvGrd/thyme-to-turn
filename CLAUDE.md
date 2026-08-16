@@ -329,6 +329,20 @@ seen the live page.
 - **Labels narrow the pool; ingredients rank what's left** (`filterByLabels` → `matchPantry`).
   That order is the point, and the tally counts the pool — "100 recipes" above a filter line
   reading "1 of 100" is the app contradicting itself in two adjacent sentences.
+- **No `confirm()`, `alert()` or `prompt()`. Ever.** Every question comes through
+  `useConfirm()` → `components/Sheet.tsx`, the bottom sheet from the handoff's inventory.
+  A native dialog is the one thing in the app that doesn't look like the app — system font,
+  system chrome, the page URL printed above the question, an OK button where the design
+  says destructive is `copper`. On a home-screen PWA it reads as the app breaking character.
+  - `ask({ title, body?, confirmLabel?, cancelLabel?, destructive? })` returns a promise, so
+    a call site keeps its shape: `if (!(await ask({...}))) return`.
+  - **Dismissing is always the SAFE answer.** Escape, the backdrop and the cancel button all
+    resolve `false`. Nothing is destroyed by walking away from a question.
+  - `destructive: true` paints the confirm button copper. Use it for anything that loses
+    data, and nothing else — `copper` is hazard-only.
+  - **The tab-bar leave guard is therefore async** (`Screen`'s `onLeave` returns
+    `boolean | Promise<boolean>`). `TabBar` always `preventDefault`s and navigates itself
+    afterwards, because a link that navigates on the tap cannot wait for an answer.
 - **`isStaple` is deliberately not a Dexie index.** IndexedDB can't key on a boolean, so
   Dexie silently leaves those rows out and the filter looks like it works while returning
   nothing. The registry is small; filter it in memory.

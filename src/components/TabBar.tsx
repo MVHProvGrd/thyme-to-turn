@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 
 /**
  * Top-level navigation. Adding a screen means adding a <Route> in App.tsx and an entry
@@ -21,9 +21,16 @@ export default function TabBar({
   onLeave,
 }: {
   active: string
-  /** Return false to cancel the tap, for a screen holding work that is not saved yet. */
-  onLeave?: () => boolean
+  /**
+   * Return false to cancel the tap, for a screen holding work that is not saved yet.
+   *
+   * It may be async, because asking now means putting a sheet up and waiting for an
+   * answer — so every tap calls preventDefault first and navigates itself afterwards.
+   * A link that navigates on mousedown cannot wait for a question.
+   */
+  onLeave?: () => boolean | Promise<boolean>
 }) {
+  const navigate = useNavigate()
   return (
     <nav className="flex shrink-0 border-t border-rule bg-paper" aria-label="Sections">
       {TABS.map((tab) => {
@@ -35,7 +42,11 @@ export default function TabBar({
             aria-current={isActive ? 'page' : undefined}
             onClick={(event) => {
               // Already here: don't make her confirm leaving for a tap that goes nowhere.
-              if (!isActive && onLeave && !onLeave()) event.preventDefault()
+              if (isActive || !onLeave) return
+              event.preventDefault()
+              void Promise.resolve(onLeave()).then((go) => {
+                if (go) navigate(tab.to)
+              })
             }}
             className={`flex min-h-[56px] flex-1 items-center justify-center font-mono text-[11px] uppercase tracking-[0.1em] focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-thyme ${
               isActive

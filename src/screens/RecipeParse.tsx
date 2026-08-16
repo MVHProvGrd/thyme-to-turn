@@ -4,6 +4,7 @@ import Screen from '../components/Screen'
 import Button from '../components/Button'
 import PageBox from '../components/PageBox'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { ParseError, parseRecipePhotos } from '../api/claude'
 import { hasApiKey } from '../api/key'
 import { BRING_YOUR_OWN_AI_PROMPT } from '../api/prompts'
@@ -41,6 +42,7 @@ type Shot = { blob: Blob; width: number; height: number; crop?: CropRect }
 export default function RecipeParse() {
   const navigate = useNavigate()
   const toast = useToast()
+  const ask = useConfirm()
   const fileInput = useRef<HTMLInputElement>(null)
 
   const [shots, setShots] = useState<Shot[]>([])
@@ -54,7 +56,7 @@ export default function RecipeParse() {
    * answer lands in exactly the same verification gate — no key, no per-recipe cost, and
    * still nothing written until she presses Save.
    */
-  async function usePasted() {
+  async function readPastedReply() {
     setPasteError(null)
     try {
       const parsed = readPastedParse(pasted)
@@ -144,15 +146,27 @@ export default function RecipeParse() {
    * only in this component until she saves or keeps them, and a pasted reply is work she
    * did in another app — neither should vanish to a stray thumb.
    */
-  function confirmLeave(): boolean {
-    if (working) return confirm('Leave now? The page is still being read.')
-    if (pasted.trim()) return confirm("Leave without using the reply you pasted?")
+  async function confirmLeave(): Promise<boolean> {
+    const leaving = { confirmLabel: 'Leave', cancelLabel: 'Stay here', destructive: true } as const
+    if (working) {
+      return ask({ title: 'Leave now?', body: 'The page is still being read.', ...leaving })
+    }
+    if (pasted.trim()) {
+      return ask({
+        title: 'Leave without using the reply you pasted?',
+        body: 'It has not been read into a recipe yet, and nothing here is saved.',
+        ...leaving,
+      })
+    }
     if (shots.length > 0) {
-      return confirm(
-        shots.length === 1
-          ? 'Leave without keeping the page you photographed?'
-          : `Leave without keeping the ${shots.length} pages you photographed?`,
-      )
+      return ask({
+        title:
+          shots.length === 1
+            ? 'Leave without keeping the page you photographed?'
+            : `Leave without keeping the ${shots.length} pages you photographed?`,
+        body: 'The photos live only on this screen until a recipe is saved.',
+        ...leaving,
+      })
     }
     return true
   }
@@ -358,7 +372,7 @@ export default function RecipeParse() {
             />
           </label>
           {pasted.trim() ? (
-            <Button className="self-start" onClick={() => void usePasted()}>
+            <Button className="self-start" onClick={() => void readPastedReply()}>
               Check what it read
             </Button>
           ) : null}

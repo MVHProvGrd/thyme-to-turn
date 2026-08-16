@@ -4,6 +4,7 @@ import Screen from '../components/Screen'
 import Button from '../components/Button'
 import { Input } from '../components/Field'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { deleteBook, findBookByIsbn, getBook, saveBook } from '../db/repo'
 import { isValidIsbn13, normalizeIsbn, pickIsbn } from '../lib/isbn'
 import type { Book } from '../lib/types'
@@ -20,6 +21,7 @@ export default function BookEdit() {
   const { uuid } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const ask = useConfirm()
 
   const [loaded, setLoaded] = useState(!uuid)
   const [existing, setExisting] = useState<Book | null>(null)
@@ -35,9 +37,15 @@ export default function BookEdit() {
   const [dirty, setDirty] = useState(false)
 
   /** The tab bar reaches this screen now, so a half-filled book is one tap from gone. */
-  function confirmLeave(): boolean {
+  async function confirmLeave(): Promise<boolean> {
     if (saving || !dirty) return true
-    return confirm('Leave without saving? Your changes will be lost.')
+    return ask({
+      title: 'Leave without saving?',
+      body: 'Your changes to this book will be lost.',
+      confirmLabel: 'Leave',
+      cancelLabel: 'Stay here',
+      destructive: true,
+    })
   }
 
   useEffect(() => {
@@ -102,7 +110,13 @@ export default function BookEdit() {
 
   async function remove() {
     if (!existing) return
-    if (!confirm(`Delete "${existing.title}"? The recipes from it are kept — they just stop pointing at it.`)) return
+    const ok = await ask({
+      title: `Delete "${existing.title}"?`,
+      body: 'The recipes from it are kept — they just stop pointing at it, and keep the citation they already show.',
+      confirmLabel: 'Delete the book',
+      destructive: true,
+    })
+    if (!ok) return
     await deleteBook(existing.uuid)
     toast('Deleted the book.')
     navigate('/books', { replace: true })

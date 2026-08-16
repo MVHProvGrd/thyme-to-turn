@@ -4,6 +4,7 @@ import Screen, { ScreenHeader } from '../components/Screen'
 import Button from '../components/Button'
 import Disclosure, { CheckRow } from '../components/Disclosure'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { exportBackup, importBackup } from '../db/backup'
 import {
   mergeIngredients,
@@ -56,6 +57,7 @@ const MERGE_PAGE = 25
 
 export default function Settings() {
   const toast = useToast()
+  const ask = useConfirm()
   const fileInput = useRef<HTMLInputElement>(null)
   const [report, setReport] = useState<string[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -125,7 +127,12 @@ export default function Settings() {
     const from = rows.find((row) => row.uuid === fromUuid)
     const into = rows.find((row) => row.uuid === intoUuid)
     if (!from || !into) return
-    if (!confirm(`Treat "${from.canonical}" as "${into.canonical}" from now on?`)) return
+    const ok = await ask({
+      title: `Treat "${from.canonical}" as "${into.canonical}"?`,
+      body: `Every recipe that says "${from.canonical}" will point at "${into.canonical}" from now on. Your printed lines are untouched, and you can take it back out from "Look inside".`,
+      confirmLabel: 'Fold together',
+    })
+    if (!ok) return
 
     const result = await mergeIngredients(fromUuid, intoUuid)
     setMergeFrom(null)
@@ -230,7 +237,13 @@ export default function Settings() {
   }
 
   async function doRemoveStarters() {
-    if (!confirm('Remove the starter recipes? Any you have edited stay.')) return
+    const ok = await ask({
+      title: 'Remove the starter recipes?',
+      body: 'Any you have edited are yours now and stay. Nothing else on this phone is touched.',
+      confirmLabel: 'Remove them',
+      destructive: true,
+    })
+    if (!ok) return
     const removed = await removeStarterRecipes()
     toast(removed ? `Removed ${removed}.` : 'Nothing to remove.')
   }
@@ -256,8 +269,21 @@ export default function Settings() {
   }
 
   async function doWipe() {
-    if (!confirm('Delete every recipe on this device? Export first — this cannot be undone.')) return
-    if (!confirm('Really delete everything?')) return
+    const ok = await ask({
+      title: 'Delete everything on this phone?',
+      body: 'Every recipe, book, photo and ingredient. There is no server and no other copy — if you have not exported, this cannot be undone.',
+      confirmLabel: 'Delete everything',
+      destructive: true,
+    })
+    if (!ok) return
+    // Two gates on purpose. This is the one action in the app with nothing behind it.
+    const reallyOk = await ask({
+      title: 'Last chance.',
+      body: 'Tap Cancel and use Export as JSON first if there is any doubt at all.',
+      confirmLabel: 'Yes, delete it all',
+      destructive: true,
+    })
+    if (!reallyOk) return
     await wipeEverything()
     toast('Deleted everything.')
   }
