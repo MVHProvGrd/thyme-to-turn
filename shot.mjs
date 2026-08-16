@@ -530,5 +530,27 @@ await page.waitForSelector('text=To serve')
 await page.waitForTimeout(2400)
 await page.screenshot({ path: `${OUT}/37-any-ai-saved.png` })
 
+/* ---------------------------------------------------- scaling and units */
+
+// Doubling is a DISPLAY choice: `raw` and the stored quantity never move, so it cannot
+// corrupt what the page actually said.
+await page.getByRole('button', { name: '×2' }).click()
+await page.waitForTimeout(250)
+await page.screenshot({ path: `${OUT}/38-recipe-doubled.png` })
+
+// Metric is the same idea: volume to volume, weight to weight, never across the two.
+await page.goto(`${BASE}#/settings`)
+await page.locator('summary', { hasText: 'Amounts' }).click()
+await page.getByText('metric', { exact: true }).click()
+await page.waitForTimeout(200)
+await page.screenshot({ path: `${OUT}/39-settings-units.png` })
+
+await page.goto(`${BASE}#/recipes`)
+await page.getByLabel('Search recipes').fill('Braised fennel')
+await page.getByText('Braised fennel with cream', { exact: true }).click()
+await page.waitForSelector('text=Make')
+await page.waitForTimeout(300)
+await page.screenshot({ path: `${OUT}/40-recipe-metric-doubled.png` })
+
 console.log('shots written')
 await browser.close()

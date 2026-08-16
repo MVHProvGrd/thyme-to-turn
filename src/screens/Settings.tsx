@@ -9,6 +9,7 @@ import {
   addStarterRecipes,
   countRecipes,
   countStarterRecipes,
+  getSettings,
   listIngredients,
   removeStarterRecipes,
   addStapleByName,
@@ -43,6 +44,8 @@ export default function Settings() {
   const ingredients = useLiveQuery(listIngredients, [], undefined)
   const [busy, setBusy] = useState(false)
   const categories = useLiveQuery(listCategories, [], undefined)
+  const settings = useLiveQuery(getSettings, [], undefined)
+  const unitPreference = settings?.unitPreference ?? 'as-written'
   const [newCategory, setNewCategory] = useState('')
   // Read once into local state; api/key.ts is the only thing that touches the secret.
   const [apiKey, setApiKeyValue] = useState(() => getApiKey())
@@ -174,6 +177,28 @@ export default function Settings() {
             </Button>
           ) : null}
         </section>
+
+        <Disclosure title="Amounts" note={UNIT_LABELS[unitPreference]}>
+          <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+            How quantities are shown. This only changes the display — the line as printed is
+            kept exactly as it was, so nothing is lost in a conversion. Cups and grams are never
+            swapped for each other: that would need to know what the ingredient weighs.
+          </p>
+          <div className="flex flex-col">
+            {(['as-written', 'metric', 'imperial'] as const).map((option) => (
+              <label key={option} className="flex min-h-[44px] cursor-pointer items-center gap-3">
+                <input
+                  type="radio"
+                  name="units"
+                  checked={unitPreference === option}
+                  onChange={() => void updateSettings({ unitPreference: option })}
+                  className="h-[18px] w-[18px] shrink-0 accent-thyme"
+                />
+                <span className="font-mono text-[13px] text-ink">{UNIT_LABELS[option]}</span>
+              </label>
+            ))}
+          </div>
+        </Disclosure>
 
         <Disclosure title="Staples" note={`${staples.length} always in`}>
           <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
@@ -371,4 +396,11 @@ export default function Settings() {
       </div>
     </Screen>
   )
+}
+
+/** Named so the closed row says something: "Amounts · as printed" beats "Amounts ›". */
+const UNIT_LABELS: Record<'as-written' | 'metric' | 'imperial', string> = {
+  'as-written': 'as printed',
+  metric: 'metric',
+  imperial: 'cups & ounces',
 }

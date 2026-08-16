@@ -5,7 +5,8 @@ import Screen from '../components/Screen'
 import Button from '../components/Button'
 import Photo from '../components/Photo'
 import SourceLine from '../components/SourceLine'
-import { addDishPhoto, getPhotoBlob, getRecipe, listIngredients, removePhoto } from '../db/repo'
+import { addDishPhoto, getPhotoBlob, getRecipe, getSettings, listIngredients, removePhoto } from '../db/repo'
+import { SCALE_STEPS, displayAmount, formatNumber, scaleYield } from '../lib/scale'
 import { ParseError, parseRecipePhotos } from '../api/claude'
 import { hasApiKey } from '../api/key'
 import { prepareImage } from '../platform/camera'
@@ -38,6 +39,16 @@ export default function RecipeDetail() {
   const fileInput = useRef<HTMLInputElement>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
+  // Scaling is a display choice, never a write: `raw` and the stored quantity are
+  // untouched, so doubling a recipe can never corrupt what the page actually said.
+  const [factor, setFactor] = useState(() => readPref(`scale:${uuid}`, 1))
+  const settings = useLiveQuery(getSettings, [], undefined)
+  const preference = settings?.unitPreference ?? 'as-written'
+
+  function chooseScale(next: number) {
+    setFactor(next)
+    writePref(`scale:${uuid}`, next)
+  }
   const [cook, setCook] = useState(() => readPref('cookMode', false))
 
   /**
@@ -170,6 +181,38 @@ export default function RecipeDetail() {
               className="!text-thyme underline underline-offset-[3px]"
             />
           )}
+          {recipe.yield?.text ? (
+            <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+              {scaleYield(recipe.yield.text, factor)}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft">Make</span>
+          <div role="group" aria-label="Scale the recipe" className="flex gap-2">
+            {SCALE_STEPS.map((step) => {
+              const on = factor === step
+              return (
+                <button
+                  key={step}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => chooseScale(step)}
+                  className={`min-h-[44px] rounded-full border px-4 font-mono text-xs ${
+                    on ? 'border-transparent bg-leaf/[0.16] font-semibold text-thyme' : 'border-rule bg-card text-ink'
+                  }`}
+                >
+                  ×{formatNumber(step)}
+                </button>
+              )
+            })}
+          </div>
+          {factor !== 1 ? (
+            <span className="font-mono text-[11px] text-ink-soft">
+              amounts only — the method still reads as printed
+            </span>
+          ) : null}
         </div>
 
         {recipe.ingredients.map((group, groupIndex) => (
@@ -186,7 +229,7 @@ export default function RecipeDetail() {
                 return (
                   <li key={itemIndex} className="col-span-3 grid grid-cols-subgrid">
                     <span className={`font-mono text-ink-soft ${cook ? 'text-[15px]' : 'text-[13px]'}`}>
-                      {formatQuantity(item.quantity, item.unit)}
+                      {displayAmount(item.quantity, item.unit, { factor, preference, formatUnit })}
                     </span>
                     <span className={`font-mono text-ink ${cook ? 'text-[15px]' : 'text-[13px]'}`}>
                       {item.item ?? item.raw}
@@ -374,25 +417,3 @@ function markFor(
   return stateFor(entry, marks, registry)
 }
 
-/** Keeps the 88px column honest: "1½ cups", "2", "" — never "undefined undefined". */
-function formatQuantity(quantity?: number, unit?: string): string {
-  if (quantity === undefined && !unit) return ''
-  const number = quantity === undefined ? '' : formatNumber(quantity)
-  return [number, formatUnit(unit, quantity)].filter(Boolean).join(' ')
-}
-
-const FRACTIONS: [number, string][] = [
-  [0.25, '¼'],
-  [1 / 3, '⅓'],
-  [0.5, '½'],
-  [2 / 3, '⅔'],
-  [0.75, '¾'],
-]
-
-function formatNumber(value: number): string {
-  const whole = Math.floor(value)
-  const rest = value - whole
-  const match = FRACTIONS.find(([size]) => Math.abs(rest - size) < 0.02)
-  if (match) return `${whole || ''}${match[1]}`
-  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100)
-}
