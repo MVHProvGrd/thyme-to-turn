@@ -69,7 +69,7 @@ Phase 1 is done — storage, and typing a recipe in. Phase 2 is done — the din
 
 ```
 lib/        types.ts · ids.ts · ingredients.ts · search.ts · backup-format.ts
-            pantry.ts (matchPantry · nextQuestions · cycleState) · emoji.ts
+            pantry.ts (matchPantry · nextQuestions · stateFor) · emoji.ts · categories.ts
 platform/   clock.ts · prefs.ts (localStorage prefs + sessionStorage marks) · files.ts · motion.ts
 db/         schema.ts (v1) · db.ts · repo.ts · backup.ts
 screens/    Dinner (landing) · RecipeList · RecipeDetail (cook mode) · RecipeEdit · Settings
@@ -170,6 +170,15 @@ seen the live page.
   email herself beats a zip she has to unpack. Phase 4 wraps the same object in a zip.
 - Import **upserts by uuid** — never appends. The round-trip test
   (`export → wipe → import → import again`) must pass.
+- **Categories are `tags`.** `Recipe.tags` has existed and been indexed (`*tags`) since
+  v1 and was already in the search haystack, so categories shipped with **no migration and
+  no new field on the recipe**. The vocabulary (presets + whatever she invents) is
+  `settings.categories`, optional and read with a `?? PRESET_CATEGORIES` default so a
+  settings row written before the feature still works. Assignments live on the recipe;
+  removing a category from the vocabulary NEVER strips it from a recipe (non-negotiable 6)
+  — an orphaned tag still shows on the recipe, is still searchable, and still appears in
+  the list's filter row. Categories are a managed vocabulary over tags, not a new taxonomy;
+  do not add a `category` field.
 - **`isStaple` is deliberately not a Dexie index.** IndexedDB can't key on a boolean, so
   Dexie silently leaves those rows out and the filter looks like it works while returning
   nothing. The registry is small; filter it in memory.

@@ -5,6 +5,16 @@ Ideas land here, not in the current branch. Newest at top.
 The habit is the point: every project in this workbench that stayed shippable kept one of
 these, and the one that didn't turned into a six-month project that didn't work yet.
 
+## Came up while adding categories
+
+- The dinner tally reads "104 recipes · 104 ready · 0 ruled out" before she marks anything.
+  "104 ready" is true to the engine (nothing ruled out) but reads as a claim she can cook
+  104 things. Worth rewording once she has an opinion — the group header `READY TO COOK`
+  has the same problem at cold start.
+- Categories on the dinner screen (only show me dinners) — deliberately not built yet; the
+  dinner screen is about ingredients, and one filter at a time is enough to judge.
+- Bulk-categorise from the recipe list, for the 100 starter recipes that have no tags.
+
 ## Removed after real use — recoverable
 
 Alisa used the dinner screen and asked for both of these to go (2026-08-16). Written down

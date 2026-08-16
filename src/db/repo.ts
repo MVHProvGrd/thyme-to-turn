@@ -11,6 +11,7 @@ import { db } from './db'
 import { SETTINGS_KEY, defaultSettings } from './schema'
 import { newId } from '../lib/ids'
 import { canonicalNames, normalize, parseIngredientLine, SEEDED_STAPLES } from '../lib/ingredients'
+import { PRESET_CATEGORIES, addCategory, removeCategory } from '../lib/categories'
 import { now } from '../platform/clock'
 import type {
   Book,
@@ -256,6 +257,35 @@ export async function updateSettings(patch: Partial<Omit<Settings, 'key'>>): Pro
   const current = await getSettings()
   const next: Settings = { ...current, ...patch, key: SETTINGS_KEY }
   await db.settings.put(next)
+  return next
+}
+
+/* ---------------------------------------------------------------- categories */
+
+/**
+ * The category vocabulary. Seeded lazily from the presets on first read rather than
+ * written at install time, so a device that predates the feature gets them too and
+ * nothing had to migrate.
+ */
+export async function listCategories(): Promise<string[]> {
+  const settings = await getSettings()
+  return settings.categories ?? [...PRESET_CATEGORIES]
+}
+
+export async function addCategoryToList(name: string): Promise<string[]> {
+  const next = addCategory(await listCategories(), name)
+  await updateSettings({ categories: next })
+  return next
+}
+
+/**
+ * Removes it from the vocabulary ONLY. Recipes carrying that tag keep it — it still shows
+ * on the recipe, is still found by search, and can still be un-picked one recipe at a
+ * time. Tidying a list is not permission to edit her recipes (non-negotiable 6).
+ */
+export async function removeCategoryFromList(name: string): Promise<string[]> {
+  const next = removeCategory(await listCategories(), name)
+  await updateSettings({ categories: next })
   return next
 }
 

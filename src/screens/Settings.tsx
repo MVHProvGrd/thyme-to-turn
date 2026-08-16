@@ -16,6 +16,7 @@ import {
   wipeEverything,
 } from '../db/repo'
 import { emojiFor } from '../lib/emoji'
+import { addCategoryToList, listCategories, removeCategoryFromList } from '../db/repo'
 import { STARTER_COUNT, loadStarterRecipes } from '../seed'
 import { downloadText, formatBytes } from '../platform/files'
 import { now } from '../platform/clock'
@@ -39,6 +40,14 @@ export default function Settings() {
   const starterCount = useLiveQuery(countStarterRecipes, [], undefined)
   const ingredients = useLiveQuery(listIngredients, [], undefined)
   const [busy, setBusy] = useState(false)
+  const categories = useLiveQuery(listCategories, [], undefined)
+  const [newCategory, setNewCategory] = useState('')
+
+  async function addCat() {
+    const name = newCategory
+    setNewCategory('')
+    if (name.trim()) await addCategoryToList(name)
+  }
 
   async function doAddStarters() {
     setBusy(true)
@@ -123,6 +132,51 @@ export default function Settings() {
               Ingredients show up here as you add recipes.
             </p>
           )}
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">Categories</h2>
+          <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+            Breakfast, soup, dessert — or anything you like. Put a recipe in one while you type it
+            in, then search by it. Removing one here never removes it from a recipe.
+          </p>
+
+          <div className="flex flex-col gap-2">
+            {(categories ?? []).map((name) => (
+              <div key={name} className="grid grid-cols-[1fr_44px] gap-2">
+                <span className="flex min-h-[44px] items-center rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink">
+                  {name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void removeCategoryFromList(name)}
+                  aria-label={`Remove the ${name} category`}
+                  className="min-h-[44px] rounded-sm border border-rule text-copper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+                >
+                  −
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <input
+              value={newCategory}
+              onChange={(event) => setNewCategory(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void addCat()
+                }
+              }}
+              placeholder="Sunday lunch"
+              aria-label="New category"
+              className="min-h-[48px] rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+            />
+            <Button variant="secondary" onClick={() => void addCat()}>
+              Add
+            </Button>
+          </div>
         </section>
 
         <section className="flex flex-col gap-3">

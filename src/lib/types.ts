@@ -161,6 +161,13 @@ export type Settings = {
   schemaVersion: number
   /** Last-used ad-hoc list, so the dinner screen isn't a blank slate (D12). */
   pantry: string[]
+  /**
+   * The category vocabulary — presets plus whatever she invents. Assignments live on
+   * `Recipe.tags`, which has been indexed since v1, so categories needed no migration.
+   * Optional and read with a `?? PRESET_CATEGORIES` default, so a settings row written
+   * before this existed still works.
+   */
+  categories?: string[]
   lastExportAt?: string
   unitPreference?: 'metric' | 'imperial' | 'as-written'
 }

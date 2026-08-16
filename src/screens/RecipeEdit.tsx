@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate, useParams } from 'react-router-dom'
 import Screen from '../components/Screen'
 import Button from '../components/Button'
 import { Input, Label, Textarea } from '../components/Field'
 import { useToast } from '../components/Toast'
-import { deleteRecipe, getRecipe, saveRecipe } from '../db/repo'
+import Tile from '../components/Tile'
+import { deleteRecipe, getRecipe, listCategories, saveRecipe } from '../db/repo'
+import { hasCategory, sameCategory, toggleCategory } from '../lib/categories'
 import type { Recipe } from '../lib/types'
 
 /**
@@ -40,7 +43,16 @@ export default function RecipeEdit() {
   const [lines, setLines] = useState<Line[]>(EMPTY_LINES)
   const [method, setMethod] = useState('')
   const [notes, setNotes] = useState('')
+  const [tags, setTags] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+
+  const categories = useLiveQuery(listCategories, [], undefined)
+  /** The vocabulary, plus any tag this recipe already carries that has left the list. */
+  const choices = useMemo(() => {
+    const list = categories ?? []
+    const orphans = tags.filter((tag) => !list.some((name) => sameCategory(name, tag)))
+    return [...list, ...orphans]
+  }, [categories, tags])
 
   useEffect(() => {
     if (!uuid) return
@@ -65,6 +77,7 @@ export default function RecipeEdit() {
       )
       setMethod(recipe.steps.map((step) => step.text).join('\n'))
       setNotes(recipe.notes ?? '')
+      setTags(recipe.tags)
       setLoaded(true)
     })
     return () => {
@@ -101,6 +114,7 @@ export default function RecipeEdit() {
           .filter(Boolean)
           .map((text, index) => ({ n: index + 1, text })),
         notes,
+        tags,
       })
       toast('Saved.')
       navigate(`/recipe/${saved.uuid}`, { replace: true })
@@ -165,6 +179,26 @@ export default function RecipeEdit() {
             placeholder="214"
           />
         </div>
+
+        {choices.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <Label>Categories</Label>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Categories">
+              {choices.map((name) => {
+                const on = hasCategory(tags, name)
+                return (
+                  <Tile
+                    key={name}
+                    name={name}
+                    state={on ? 'have' : 'unknown'}
+                    ariaLabel={`${name}, ${on ? 'selected' : 'not selected'}`}
+                    onTap={() => setTags((current) => toggleCategory(current, name))}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex flex-col gap-2">
           <Label>Ingredients</Label>

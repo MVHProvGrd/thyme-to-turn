@@ -252,5 +252,33 @@ for (const name of ['beef', 'onion', 'carrot']) await markHave(name)
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${OUT}/19-dinner-have-ranking.png` })
 
+/* ------------------------------------------------------------------ categories */
+
+// Settings owns the vocabulary: the presets, plus anything she invents.
+await page.goto(`${BASE}#/settings`)
+await page.getByRole('button', { name: 'Remove the Breakfast category' }).waitFor()
+await page.getByLabel('New category').fill('Sunday lunch')
+await page.getByRole('button', { name: 'Add', exact: true }).click()
+await page.getByRole('button', { name: 'Remove the Sunday lunch category' }).waitFor()
+await page.screenshot({ path: `${OUT}/20-settings-categories.png` })
+
+// She puts a recipe in one while typing it in.
+await page.goto(`${BASE}#/recipes`)
+await page.getByLabel('Search recipes').fill('Lentil soup')
+await page.getByText('Lentil soup', { exact: true }).click()
+await page.getByRole('button', { name: 'Edit' }).click()
+await page.getByRole('button', { name: 'Soup, not selected' }).click()
+await page.getByRole('button', { name: 'Dinner, not selected' }).click()
+await page.screenshot({ path: `${OUT}/21-edit-categories.png` })
+await page.getByRole('button', { name: 'Save' }).click()
+await page.waitForURL(/#\/recipe\//)
+
+// And then finds it by that, alongside the ingredient search.
+await page.goto(`${BASE}#/recipes`)
+await page.waitForTimeout(2400) // let the save toast clear
+await page.getByRole('button', { name: 'Soup, not filtering' }).click()
+await page.waitForTimeout(250)
+await page.screenshot({ path: `${OUT}/22-list-category-filter.png` })
+
 console.log('shots written')
 await browser.close()
