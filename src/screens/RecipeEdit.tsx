@@ -8,8 +8,8 @@ import { useToast } from '../components/Toast'
 import Tile from '../components/Tile'
 import { PARSE_MODEL } from '../api/claude'
 import { RECIPE_SCHEMA_VERSION } from '../api/prompts'
-import { deleteRecipe, getRecipe, listBooks, listCategories, saveRecipe } from '../db/repo'
-import { hasCategory, sameCategory, toggleCategory } from '../lib/categories'
+import { deleteRecipe, getRecipe, listBooks, listCategories, listTags, saveRecipe } from '../db/repo'
+import { hasCategory, toggleCategory, unlistedLabels } from '../lib/categories'
 import { draftFromParsed, groupsFromRows, isDoubted } from '../lib/parse-result'
 import type { DraftRow } from '../lib/parse-result'
 import type { ParsedRecipe, PhotoRef, Recipe } from '../lib/types'
@@ -107,12 +107,19 @@ export default function RecipeEdit() {
   const books = useLiveQuery(listBooks, [], undefined)
 
   const categories = useLiveQuery(listCategories, [], undefined)
-  /** The vocabulary, plus any tag this recipe already carries that has left the list. */
+  const tagVocabulary = useLiveQuery(listTags, [], undefined)
+  /**
+   * Two rows of chips over one field. Categories say what KIND of meal it is, tags say
+   * what it is LIKE — both land in `tags`, and the two vocabularies are what tell them
+   * apart. Anything this recipe carries that has left BOTH lists shows with the
+   * categories, so a label she removed from Settings is still visible and still un-pickable
+   * one recipe at a time.
+   */
   const choices = useMemo(() => {
     const list = categories ?? []
-    const orphans = tags.filter((tag) => !list.some((name) => sameCategory(name, tag)))
-    return [...list, ...orphans]
-  }, [categories, tags])
+    return [...list, ...unlistedLabels([{ tags }], list, tagVocabulary ?? [])]
+  }, [categories, tagVocabulary, tags])
+  const tagChoices = tagVocabulary ?? []
 
   useEffect(() => {
     if (!uuid) return
@@ -320,6 +327,26 @@ export default function RecipeEdit() {
             <Label>Categories</Label>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Categories">
               {choices.map((name) => {
+                const on = hasCategory(tags, name)
+                return (
+                  <Tile
+                    key={name}
+                    name={name}
+                    state={on ? 'have' : 'unknown'}
+                    ariaLabel={`${name}, ${on ? 'selected' : 'not selected'}`}
+                    onTap={() => setTags((current) => toggleCategory(current, name))}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {tagChoices.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <Label>Tags</Label>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Tags">
+              {tagChoices.map((name) => {
                 const on = hasCategory(tags, name)
                 return (
                   <Tile

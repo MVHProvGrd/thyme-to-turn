@@ -8,8 +8,8 @@ import EmptyState from '../components/EmptyState'
 import Button from '../components/Button'
 import Photo from '../components/Photo'
 import Tile from '../components/Tile'
-import { getPhotoBlob, listCategories, listRecipes } from '../db/repo'
-import { hasCategory, sameCategory } from '../lib/categories'
+import { getPhotoBlob, listCategories, listRecipes, listTags } from '../db/repo'
+import { hasCategory, sameCategory, unlistedLabels, vocabularyInUse } from '../lib/categories'
 import { searchRecipes } from '../lib/search'
 import type { Recipe } from '../lib/types'
 
@@ -23,19 +23,27 @@ export default function RecipeList() {
   const [category, setCategory] = useState<string | null>(null)
   const recipes = useLiveQuery(listRecipes, [], undefined)
   const categories = useLiveQuery(listCategories, [], undefined)
+  const tagVocabulary = useLiveQuery(listTags, [], undefined)
 
   /*
-   * Only categories something actually uses. Ten empty chips that all return nothing is
-   * noise; this way the row appears as she starts labelling and never offers a dead end.
-   * A tag she removed from the vocabulary but not from her recipes still shows here.
+   * Both vocabularies in one row — categories first, then tags — and only labels something
+   * actually carries. Ten empty chips that all return nothing is noise; this way the row
+   * appears as she starts labelling and never offers a dead end. A label she removed from
+   * a list but not from her recipes still shows, so she can still filter it out of the way.
+   *
+   * One row rather than two menus, unlike the dinner screen: this IS the list of recipes,
+   * so chips pushing it down costs a scroll rather than hiding the answer.
    */
   const inUse = useMemo(() => {
-    const used = new Set<string>()
-    for (const recipe of recipes ?? []) for (const tag of recipe.tags) used.add(tag)
-    const known = (categories ?? []).filter((name) => [...used].some((tag) => sameCategory(tag, name)))
-    const orphans = [...used].filter((tag) => !(categories ?? []).some((name) => sameCategory(name, tag)))
-    return [...known, ...orphans]
-  }, [recipes, categories])
+    const all = recipes ?? []
+    const cats = categories ?? []
+    const tags = tagVocabulary ?? []
+    return [
+      ...vocabularyInUse(all, cats),
+      ...vocabularyInUse(all, tags),
+      ...unlistedLabels(all, cats, tags),
+    ]
+  }, [recipes, categories, tagVocabulary])
 
   const results = useMemo(() => {
     const found = recipes ? searchRecipes(recipes, query) : []

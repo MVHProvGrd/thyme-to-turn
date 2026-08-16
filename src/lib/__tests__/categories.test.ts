@@ -3,11 +3,15 @@ import {
   MAX_CATEGORY_LENGTH,
   PRESET_CATEGORIES,
   addCategory,
+  filterByLabels,
   hasCategory,
+  labelFilterIsEmpty,
   normalizeCategory,
   removeCategory,
   sameCategory,
   toggleCategory,
+  unlistedLabels,
+  vocabularyInUse,
 } from '../categories'
 
 describe('normalizeCategory', () => {
@@ -90,5 +94,95 @@ describe('the presets', () => {
     for (const expected of ['Breakfast', 'Lunch', 'Dinner', 'Soup', 'Dessert']) {
       expect(PRESET_CATEGORIES).toContain(expected)
     }
+  })
+})
+
+/**
+ * Two vocabularies over one field. Categories say what KIND of meal it is, tags say what
+ * it is LIKE, and both land in `recipe.tags` — so the tests that matter are the ones that
+ * keep them from bleeding into each other's menus.
+ */
+const recipe = (...tags: string[]) => ({ tags })
+
+const WEEKNIGHT = recipe('Dinner', 'Easy', 'Kid approved')
+const SUNDAY = recipe('Dinner', 'Family favorite')
+const PUDDING = recipe('Dessert', 'Easy')
+const PLAIN = recipe()
+const ALL = [WEEKNIGHT, SUNDAY, PUDDING, PLAIN]
+
+const CATEGORIES = ['Breakfast', 'Dinner', 'Dessert']
+const TAGS = ['Easy', 'Kid approved', 'Family favorite', 'Quick']
+
+describe('filterByLabels', () => {
+  it('returns everything when nothing is picked', () => {
+    expect(filterByLabels(ALL, {})).toEqual(ALL)
+    expect(filterByLabels(ALL, { category: null, tags: [] })).toEqual(ALL)
+    expect(labelFilterIsEmpty({ category: null, tags: [] })).toBe(true)
+  })
+
+  it('narrows by one category', () => {
+    expect(filterByLabels(ALL, { category: 'Dinner' })).toEqual([WEEKNIGHT, SUNDAY])
+  })
+
+  it('ANDs the tags — two picked means both, not either', () => {
+    expect(filterByLabels(ALL, { tags: ['Easy'] })).toEqual([WEEKNIGHT, PUDDING])
+    expect(filterByLabels(ALL, { tags: ['Easy', 'Kid approved'] })).toEqual([WEEKNIGHT])
+  })
+
+  it('adding a tag can only narrow, never widen', () => {
+    const one = filterByLabels(ALL, { tags: ['Easy'] })
+    const two = filterByLabels(ALL, { tags: ['Easy', 'Family favorite'] })
+    expect(two.length).toBeLessThanOrEqual(one.length)
+  })
+
+  it('combines a category with tags', () => {
+    expect(filterByLabels(ALL, { category: 'Dinner', tags: ['Easy'] })).toEqual([WEEKNIGHT])
+    expect(filterByLabels(ALL, { category: 'Dessert', tags: ['Kid approved'] })).toEqual([])
+  })
+
+  it('ignores case, the way every other label comparison does', () => {
+    expect(filterByLabels(ALL, { category: 'dinner' })).toEqual([WEEKNIGHT, SUNDAY])
+    expect(filterByLabels(ALL, { tags: ['EASY'] })).toEqual([WEEKNIGHT, PUDDING])
+  })
+})
+
+describe('vocabularyInUse', () => {
+  it('offers only labels something actually carries', () => {
+    // Breakfast is in the vocabulary but on no recipe: offering it is a guaranteed nothing.
+    expect(vocabularyInUse(ALL, CATEGORIES)).toEqual(['Dinner', 'Dessert'])
+    expect(vocabularyInUse(ALL, TAGS)).toEqual(['Easy', 'Kid approved', 'Family favorite'])
+  })
+
+  it('keeps the vocabulary order, not the order recipes happen to be in', () => {
+    expect(vocabularyInUse([PUDDING, WEEKNIGHT], CATEGORIES)).toEqual(['Dinner', 'Dessert'])
+  })
+
+  it('never puts a tag in the category list, or the other way round', () => {
+    expect(vocabularyInUse(ALL, CATEGORIES)).not.toContain('Easy')
+    expect(vocabularyInUse(ALL, TAGS)).not.toContain('Dinner')
+  })
+})
+
+describe('unlistedLabels', () => {
+  it('finds what is left after a label is removed from its list', () => {
+    // She deleted "Dessert" from Categories; the pudding still says Dessert.
+    expect(unlistedLabels(ALL, ['Breakfast', 'Dinner'], TAGS)).toEqual(['Dessert'])
+  })
+
+  it('is empty when every label belongs to a vocabulary', () => {
+    expect(unlistedLabels(ALL, CATEGORIES, TAGS)).toEqual([])
+  })
+
+  it('does not report a tag as unlisted just because it is not a category', () => {
+    expect(unlistedLabels(ALL, CATEGORIES, TAGS)).not.toContain('Easy')
+  })
+})
+
+describe('the two vocabularies stay apart', () => {
+  it('a name in one list is not offered by the other, whatever the case', () => {
+    const cats = ['Dinner']
+    const tags = ['dinner party']
+    expect(vocabularyInUse([recipe('Dinner')], tags)).toEqual([])
+    expect(vocabularyInUse([recipe('dinner party')], cats)).toEqual([])
   })
 })

@@ -227,6 +227,13 @@ export type Settings = {
    * before this existed still works.
    */
   categories?: string[]
+  /**
+   * The second vocabulary — "kid approved", "easy", "girl dinner". Assignments share
+   * `Recipe.tags` with the categories; these two lists are what tell the two kinds apart.
+   * Optional and read with a `?? PRESET_TAGS` default, so a settings row written before
+   * this existed still works.
+   */
+  tags?: string[]
   lastExportAt?: string
   unitPreference?: 'metric' | 'imperial' | 'as-written'
 }

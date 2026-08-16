@@ -306,6 +306,29 @@ seen the live page.
   — an orphaned tag still shows on the recipe, is still searchable, and still appears in
   the list's filter row. Categories are a managed vocabulary over tags, not a new taxonomy;
   do not add a `category` field.
+- **TWO vocabularies over that one field.** `settings.categories` says what KIND of meal it
+  is (Breakfast, Soup); `settings.tags` says what it is LIKE (Kid approved, Girl dinner).
+  Both write into `Recipe.tags`, so tags needed no migration either — the two lists are the
+  only thing that tells the two apart. Consequences worth knowing before you touch this:
+  - **A name lives in one list or the other, never both.** `repo.ts` refuses the second and
+    says which list already has it. Otherwise it would sit in two filter menus that mean
+    different things and land in the same place on the recipe.
+  - **A label in neither list is offered with the CATEGORIES** (`unlistedLabels`). Once a
+    name is off both lists nothing records which it came from; guessing shows it twice.
+  - Never build a filter row straight from `recipe.tags` — that mixes the two. Go through
+    `vocabularyInUse()` per list.
+- **Tag filters are ANDed; two picked means both.** Unlike the ingredient marks there is no
+  "best available" fallback: these are her own labels on her own recipes, so "nothing has
+  all of those" is a true, readable answer and un-tapping one is a single tap. Adding a tag
+  can only narrow.
+- **The dinner screen's label filters are MENUS, not chip rows.** Categories and tags
+  together run past a dozen; laid out flat they push the answer off the bottom of the phone.
+  Closed they cost one 44px row and still say what is on. The recipe LIST keeps a flat chip
+  row — there the chips push a list down rather than hiding the answer. Both screens offer
+  only labels something actually carries.
+- **Labels narrow the pool; ingredients rank what's left** (`filterByLabels` → `matchPantry`).
+  That order is the point, and the tally counts the pool — "100 recipes" above a filter line
+  reading "1 of 100" is the app contradicting itself in two adjacent sentences.
 - **`isStaple` is deliberately not a Dexie index.** IndexedDB can't key on a boolean, so
   Dexie silently leaves those rows out and the filter looks like it works while returning
   nothing. The registry is small; filter it in memory.

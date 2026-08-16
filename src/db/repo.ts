@@ -18,7 +18,7 @@ import {
   splitAlternatives,
   SEEDED_STAPLES,
 } from '../lib/ingredients'
-import { PRESET_CATEGORIES, addCategory, removeCategory } from '../lib/categories'
+import { PRESET_CATEGORIES, PRESET_TAGS, addCategory, hasCategory, removeCategory } from '../lib/categories'
 import { bookCitation } from '../lib/books'
 import { normalizeIsbn } from '../lib/isbn'
 import { now } from '../platform/clock'
@@ -686,32 +686,66 @@ export async function updateSettings(patch: Partial<Omit<Settings, 'key'>>): Pro
   return next
 }
 
-/* ---------------------------------------------------------------- categories */
+/* ------------------------------------------------------- categories and tags */
 
 /**
- * The category vocabulary. Seeded lazily from the presets on first read rather than
- * written at install time, so a device that predates the feature gets them too and
- * nothing had to migrate.
+ * Two vocabularies over one field. Categories say what KIND of meal it is; tags say what
+ * it is LIKE. Both write into `recipe.tags`, which has been a multi-entry index since v1,
+ * so neither needed a migration — these lists are what tell the two apart.
+ *
+ * Both are seeded lazily from their presets on first read rather than written at install
+ * time, so a device that predates either feature gets them too.
  */
 export async function listCategories(): Promise<string[]> {
   const settings = await getSettings()
   return settings.categories ?? [...PRESET_CATEGORIES]
 }
 
-export async function addCategoryToList(name: string): Promise<string[]> {
-  const next = addCategory(await listCategories(), name)
-  await updateSettings({ categories: next })
-  return next
+export async function listTags(): Promise<string[]> {
+  const settings = await getSettings()
+  return settings.tags ?? [...PRESET_TAGS]
 }
 
 /**
- * Removes it from the vocabulary ONLY. Recipes carrying that tag keep it — it still shows
- * on the recipe, is still found by search, and can still be un-picked one recipe at a
- * time. Tidying a list is not permission to edit her recipes (non-negotiable 6).
+ * A name belongs to one vocabulary or the other, never both.
+ *
+ * If "Soup" were a category AND a tag, it would appear in two filter menus that mean
+ * different things and land in the same place on the recipe — so the second one is
+ * refused, out loud, rather than quietly creating an ambiguity she would have to debug
+ * from the outside.
+ */
+export type AddLabelResult = { list: string[]; clash?: 'category' | 'tag' }
+
+export async function addCategoryToList(name: string): Promise<AddLabelResult> {
+  const list = await listCategories()
+  if (hasCategory(await listTags(), name)) return { list, clash: 'tag' }
+  const next = addCategory(list, name)
+  await updateSettings({ categories: next })
+  return { list: next }
+}
+
+export async function addTagToList(name: string): Promise<AddLabelResult> {
+  const list = await listTags()
+  if (hasCategory(await listCategories(), name)) return { list, clash: 'category' }
+  const next = addCategory(list, name)
+  await updateSettings({ tags: next })
+  return { list: next }
+}
+
+/**
+ * Removes it from the vocabulary ONLY. Recipes carrying that label keep it — it still
+ * shows on the recipe, is still found by search, and can still be un-picked one recipe at
+ * a time. Tidying a list is not permission to edit her recipes (non-negotiable 6).
  */
 export async function removeCategoryFromList(name: string): Promise<string[]> {
   const next = removeCategory(await listCategories(), name)
   await updateSettings({ categories: next })
+  return next
+}
+
+export async function removeTagFromList(name: string): Promise<string[]> {
+  const next = removeCategory(await listTags(), name)
+  await updateSettings({ tags: next })
   return next
 }
 

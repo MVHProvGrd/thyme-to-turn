@@ -8,9 +8,17 @@ import EmptyState from '../components/EmptyState'
 import SourceLine from '../components/SourceLine'
 import Tile from '../components/Tile'
 import { useFlip } from '../components/useFlip'
-import { listIngredients, listRecipes } from '../db/repo'
+import { listCategories, listIngredients, listRecipes, listTags } from '../db/repo'
 import { emojiFor } from '../lib/emoji'
 import { fold } from '../lib/ingredients'
+import {
+  filterByLabels,
+  hasCategory,
+  labelFilterIsEmpty,
+  unlistedLabels,
+  vocabularyInUse,
+} from '../lib/categories'
+import type { LabelFilter } from '../lib/categories'
 import { matchPantry, nextQuestions, shortlist } from '../lib/pantry'
 import type { Choice, IngredientState, Match } from '../lib/pantry'
 import type { IngredientEntry } from '../lib/types'
@@ -70,6 +78,13 @@ export default function Dinner() {
   const registry = useLiveQuery(listIngredients, [], undefined)
 
   const [marks, setMarks] = useState<Marks>(() => readSession('marks', {}))
+  /**
+   * Her own labels, narrowing the pool before anything else runs. Session-scoped like the
+   * ingredient marks — "kid approved tonight" is not a standing preference.
+   */
+  const [labels, setLabels] = useState<LabelFilter>(() => readSession('labels', { category: null, tags: [] }))
+  /** Which menu is open. One at a time, so the page never becomes a wall of chips. */
+  const [menu, setMenu] = useState<'category' | 'tags' | null>(null)
   // Which tab is open decides what a tap means. Have leads, at Alisa's request
   // (2026-08-16) — saying what she has is what narrows the list, so it is the tab she
   // opens on.
@@ -101,12 +116,57 @@ export default function Dinner() {
 
   function reset() {
     updateMarks({})
+    updateLabels({ category: null, tags: [] })
     setQuery('')
+    setMenu(null)
   }
 
+  function updateLabels(next: LabelFilter) {
+    setLabels(next)
+    writeSession('labels', next)
+  }
+
+  /** One category at a time — a recipe is breakfast or it is dinner. Tapping it again clears it. */
+  function pickCategory(name: string) {
+    const on = labels.category !== null && labels.category !== undefined && hasCategory([labels.category], name)
+    updateLabels({ ...labels, category: on ? null : name })
+  }
+
+  /** Tags are ANDed: picking two means both. Tapping one again takes it back off. */
+  function toggleTagFilter(name: string) {
+    const current = labels.tags ?? []
+    const on = hasCategory(current, name)
+    updateLabels({ ...labels, tags: on ? current.filter((t) => !hasCategory([t], name)) : [...current, name] })
+  }
+
+  const categories = useLiveQuery(listCategories, [], undefined)
+  const tagVocabulary = useLiveQuery(listTags, [], undefined)
+
+  /*
+   * Only labels something actually carries. A filter that can only ever return nothing is
+   * worse than no filter, and this screen is trying hard not to become a wall of options.
+   * Labels that have left BOTH vocabularies show with the categories — see unlistedLabels.
+   */
+  const catChoices = useMemo(() => {
+    const all = recipes ?? []
+    const list = categories ?? []
+    return [...vocabularyInUse(all, list), ...unlistedLabels(all, list, tagVocabulary ?? [])]
+  }, [recipes, categories, tagVocabulary])
+  const tagChoices = useMemo(
+    () => vocabularyInUse(recipes ?? [], tagVocabulary ?? []),
+    [recipes, tagVocabulary],
+  )
+
+  /**
+   * Her labels narrow the POOL; the ingredient marks then rank what is left. That order is
+   * the point — "kid approved" is a decision about what she wants to cook, and the pantry
+   * question is only interesting once that decision is made.
+   */
+  const pool = useMemo(() => filterByLabels(recipes ?? [], labels), [recipes, labels])
+
   const matches = useMemo(
-    () => (recipes && registry ? matchPantry(recipes, marks, registry) : []),
-    [recipes, registry, marks],
+    () => (recipes && registry ? matchPantry(pool, marks, registry) : []),
+    [recipes, registry, pool, marks],
   )
 
   // Once she has said she HAS something, the list is only what uses it. See shortlist().
@@ -149,6 +209,10 @@ export default function Dinner() {
   }
 
   const count = recipes.length
+  const labelSummary = [labels.category, ...(labels.tags ?? [])].filter(Boolean).join(' + ')
+  // The tally counts what is actually in play. "100 recipes" above a filter line reading
+  // "1 of 100" is the app contradicting itself in two adjacent sentences.
+  const poolCount = pool.length
   // Say why the list got shorter, and how well it matched — quietly showing 6 where there
   // were 104 is the kind of silence that reads as a bug.
   const picked = Object.values(marks).filter((state) => state === 'have').length
@@ -160,8 +224,8 @@ export default function Dinner() {
     : marked === 0
       // "104 ready" before she has said anything reads as a claim she can cook 104 things.
       // Nothing is ruled out yet, which is a different statement — so say that instead.
-      ? `${count} ${count === 1 ? 'recipe' : 'recipes'} · tap what you have`
-      : `${count} ${count === 1 ? 'recipe' : 'recipes'} · ${ready.length} ready · ${ruledOut} ruled out`
+      ? `${poolCount} ${poolCount === 1 ? 'recipe' : 'recipes'} · tap what you have`
+      : `${poolCount} ${poolCount === 1 ? 'recipe' : 'recipes'} · ${ready.length} ready · ${ruledOut} ruled out`
 
   function openRecipe(uuid: string) {
     navigate(`/recipe/${uuid}`, { state: { from: '/dinner' } })
@@ -201,6 +265,81 @@ export default function Dinner() {
         </div>
       ) : (
         <>
+          {catChoices.length > 0 || tagChoices.length > 0 ? (
+            <div className="border-b border-rule px-5 pb-3 pt-3">
+              {/*
+                Two menus rather than two rows of chips. Categories and tags together run to
+                a dozen or more, and this screen is already a grid of ingredients and a list
+                of results — laid out flat they would push the answer off the bottom of the
+                phone. Closed, they cost one 44px row and still say what is on.
+              */}
+              <div className="flex gap-2">
+                {catChoices.length > 0 ? (
+                  <MenuButton
+                    label="Category"
+                    value={labels.category ?? null}
+                    open={menu === 'category'}
+                    onTap={() => setMenu(menu === 'category' ? null : 'category')}
+                  />
+                ) : null}
+                {tagChoices.length > 0 ? (
+                  <MenuButton
+                    label="Tags"
+                    value={(labels.tags ?? []).length ? `${(labels.tags ?? []).length} on` : null}
+                    open={menu === 'tags'}
+                    onTap={() => setMenu(menu === 'tags' ? null : 'tags')}
+                  />
+                ) : null}
+              </div>
+
+              {menu ? (
+                <div
+                  className="flex flex-wrap gap-2 pt-3"
+                  role="group"
+                  aria-label={menu === 'category' ? 'Filter by category' : 'Filter by tag'}
+                >
+                  {(menu === 'category' ? catChoices : tagChoices).map((name) => {
+                    const on =
+                      menu === 'category'
+                        ? labels.category != null && hasCategory([labels.category], name)
+                        : hasCategory(labels.tags ?? [], name)
+                    return (
+                      <Tile
+                        key={name}
+                        name={name}
+                        state={on ? 'have' : 'unknown'}
+                        ariaLabel={`${name}, ${on ? 'filtering' : 'not filtering'}`}
+                        onTap={() =>
+                          menu === 'category' ? pickCategory(name) : toggleTagFilter(name)
+                        }
+                      />
+                    )
+                  })}
+                </div>
+              ) : null}
+
+              {/*
+                Never narrow the screen silently. Showing 18 where there were 104, with no
+                word about why, is the kind of quiet that reads as a bug.
+              */}
+              {!labelFilterIsEmpty(labels) ? (
+                <div className="flex items-center justify-between gap-3 pt-3">
+                  <p className="font-mono text-[11px] text-ink-soft" aria-live="polite">
+                    {pool.length} of {count} {count === 1 ? 'recipe' : 'recipes'}
+                    {labelSummary ? ` · ${labelSummary}` : ''}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => updateLabels({ category: null, tags: [] })}
+                    className="min-h-[44px] font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft underline underline-offset-4"
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="px-5 pb-1 pt-4">
             <SearchField
               value={query}
@@ -261,9 +400,11 @@ export default function Dinner() {
             {ready.length === 0 && oneAway.length === 0 ? (
               <div className="mt-[14px] flex flex-col items-start gap-3 rounded-sm border border-rule bg-card px-5 py-7">
                 <p className="font-serif text-[19px] leading-[1.35] text-ink [text-wrap:pretty]">
-                  {narrowed
-                    ? 'Nothing you have is one thing away. Un-tap something, or add a recipe.'
-                    : 'Nothing matches. Un-tap something, or add a recipe.'}
+                  {pool.length === 0
+                    ? `Nothing is labelled ${labelSummary}. Clear a filter, or put that label on a recipe.`
+                    : narrowed
+                      ? 'Nothing you have is one thing away. Un-tap something, or add a recipe.'
+                      : 'Nothing matches. Un-tap something, or add a recipe.'}
                 </p>
                 <Button onClick={reset}>Reset</Button>
               </div>
@@ -363,5 +504,38 @@ function ResultCard({
         <div className="pb-2" />
       )}
     </article>
+  )
+}
+
+/**
+ * A closed filter menu: what it filters, and what it is set to. One 44px row whether or not
+ * anything is picked, so the controls never push the answer off the screen.
+ */
+function MenuButton({
+  label,
+  value,
+  open,
+  onTap,
+}: {
+  label: string
+  value: string | null
+  open: boolean
+  onTap: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onTap}
+      aria-expanded={open}
+      aria-label={`${label}: ${value ?? 'any'}`}
+      className={`flex min-h-[44px] flex-1 items-center justify-between gap-2 rounded-sm border px-3 font-mono text-[11px] uppercase tracking-[0.08em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme ${
+        value ? 'border-leaf bg-leaf/10 text-thyme' : 'border-rule bg-card text-ink-soft'
+      }`}
+    >
+      <span className="truncate">{value ? `${label} · ${value}` : label}</span>
+      <span aria-hidden="true" className="shrink-0 opacity-70">
+        {open ? '\u2303' : '\u2304'}
+      </span>
+    </button>
   )
 }

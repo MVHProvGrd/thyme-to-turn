@@ -22,7 +22,14 @@ import {
 } from '../db/repo'
 import { fold } from '../lib/ingredients'
 import { clearApiKey, getApiKey, setApiKey } from '../api/key'
-import { addCategoryToList, listCategories, removeCategoryFromList } from '../db/repo'
+import {
+  addCategoryToList,
+  addTagToList,
+  listCategories,
+  listTags,
+  removeCategoryFromList,
+  removeTagFromList,
+} from '../db/repo'
 import { STARTER_COUNT, loadStarterRecipes } from '../seed'
 import { downloadText, formatBytes } from '../platform/files'
 import { now } from '../platform/clock'
@@ -62,6 +69,8 @@ export default function Settings() {
   const settings = useLiveQuery(getSettings, [], undefined)
   const unitPreference = settings?.unitPreference ?? 'as-written'
   const [newCategory, setNewCategory] = useState('')
+  const tags = useLiveQuery(listTags, [], undefined)
+  const [newTag, setNewTag] = useState('')
   // Read once into local state; api/key.ts is the only thing that touches the secret.
   const [apiKey, setApiKeyValue] = useState(() => getApiKey())
   const [stapleQuery, setStapleQuery] = useState('')
@@ -188,10 +197,25 @@ export default function Settings() {
     ? (ingredients ?? []).filter((entry) => !entry.isStaple && entry.canonical.includes(q))
     : (ingredients ?? []).filter((entry) => !entry.isStaple).slice(0, 10)
 
+  /**
+   * A name lives in one vocabulary or the other, never both — otherwise it would sit in
+   * two filter menus that mean different things and land in the same place on the recipe.
+   * The clash is said out loud rather than swallowed.
+   */
   async function addCat() {
     const name = newCategory
+    if (!name.trim()) return
     setNewCategory('')
-    if (name.trim()) await addCategoryToList(name)
+    const { clash } = await addCategoryToList(name)
+    if (clash) toast(`"${name.trim()}" is already a tag. A name can be one or the other.`)
+  }
+
+  async function addTag() {
+    const name = newTag
+    if (!name.trim()) return
+    setNewTag('')
+    const { clash } = await addTagToList(name)
+    if (clash) toast(`"${name.trim()}" is already a category. A name can be one or the other.`)
   }
 
   async function doAddStarters() {
@@ -613,6 +637,54 @@ export default function Settings() {
               className="min-h-[48px] rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
             />
             <Button variant="secondary" onClick={() => void addCat()}>
+              Add
+            </Button>
+          </div>
+        </Disclosure>
+
+        <Disclosure title="Tags" note={`${(tags ?? []).length}`}>
+          <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+            Not what kind of meal it is — what it's <em>like</em>. Kid approved, easy, girl
+            dinner. A recipe can carry as many as fit, and Plan a meal can narrow by them.
+            Removing one here never removes it from a recipe.
+          </p>
+
+          <div className="flex flex-col gap-2">
+            {(tags ?? []).map((name) => (
+              <div key={name} className="grid grid-cols-[1fr_44px] gap-2">
+                <span className="flex min-h-[44px] items-center rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink">
+                  {name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void removeTagFromList(name)}
+                  aria-label={`Remove the ${name} tag`}
+                  className="min-h-[44px] rounded-sm border border-rule text-copper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+                >
+                  −
+                </button>
+              </div>
+            ))}
+            {(tags ?? []).length === 0 ? (
+              <p className="font-mono text-[11px] text-ink-soft">No tags yet. Add one below.</p>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <input
+              value={newTag}
+              onChange={(event) => setNewTag(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void addTag()
+                }
+              }}
+              placeholder="Kid approved"
+              aria-label="New tag"
+              className="min-h-[48px] rounded-sm border border-rule bg-card px-3 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-thyme"
+            />
+            <Button variant="secondary" onClick={() => void addTag()}>
               Add
             </Button>
           </div>
