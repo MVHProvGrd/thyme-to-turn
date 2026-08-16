@@ -193,6 +193,11 @@ seen the live page.
   Library asks for is simply the caching.
 - **Every object URL is revoked** (`useObjectUrl`). A list of covers or thumbnails that mints
   them and never releases them leaks until iOS kills the tab.
+- **Scaling and unit preference are DISPLAY ONLY** (`lib/scale.ts`). `raw` and the stored
+  quantity never move, so doubling a recipe cannot corrupt what the page said. Conversion
+  goes volume→volume and weight→weight and REFUSES to cross: a cup of flour and a cup of
+  water do not weigh the same, and that needs a density the app has no business guessing.
+  A unit it cannot convert (bulb, clove, pinch) is left exactly as written.
 - **Photos: dish crops destructively, page photos never do.** `repo.replacePhotoBytes`
   throws on a `page` photo. A dish photo is hers and a bad crop is fixable by taking another;
   a page photo is the only record of what page 214 said when a parse turns out wrong, so it
@@ -220,6 +225,12 @@ seen the live page.
 - **The prompt captures functional content only** — ingredients, method, yield, times — and
   is explicitly told to ignore the headnote and the author's prose. That is a rights
   posture as much as a product one (05-SOURCES-AND-RIGHTS.md), and it is not decoration.
+- **A page photo's box says what is SENT, not what is stored** (`components/PageBox.tsx`).
+  She drags a rectangle around the recipe; the whole page is saved with the box recorded as
+  a `crop` rect on the `PhotoRef`, and only the boxed region goes to the model. Better parse,
+  roughly half the image tokens, and the evidence survives. `CropRect` lives in
+  `lib/types.ts` — a component may not import from `platform/`, and the architecture test
+  will say so.
 - **Categories are `tags`.** `Recipe.tags` has existed and been indexed (`*tags`) since
   v1 and was already in the search haystack, so categories shipped with **no migration and
   no new field on the recipe**. The vocabulary (presets + whatever she invents) is

@@ -12,10 +12,11 @@
 export const MAX_EDGE = 2000
 export const JPEG_QUALITY = 0.85
 
+import type { CropRect } from '../lib/types'
+
 export type StoredImage = { blob: Blob; mime: 'image/jpeg'; width: number; height: number }
 
-/** Fractional 0–1 crop rectangle, the same shape PhotoRef.crop uses. */
-export type CropRect = { x: number; y: number; w: number; h: number }
+export type { CropRect }
 
 async function decode(source: Blob): Promise<ImageBitmap | HTMLImageElement> {
   if (typeof createImageBitmap === 'function') {

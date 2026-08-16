@@ -9,11 +9,14 @@
 /** Every row we own has one of these, minted by us, immutable forever (D3). */
 export type Uuid = string
 
+/** A fractional 0–1 rectangle on an image. Fractional so it survives any downscale. */
+export type CropRect = { x: number; y: number; w: number; h: number }
+
 export type PhotoRef = {
   uuid: Uuid
   kind: 'page' | 'dish' | 'other'
   /** Fractional 0–1. Page photos crop non-destructively; the pixels are evidence. */
-  crop?: { x: number; y: number; w: number; h: number }
+  crop?: CropRect
   width?: number
   height?: number
   bytes?: number

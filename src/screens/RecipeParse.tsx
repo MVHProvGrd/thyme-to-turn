@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Screen from '../components/Screen'
 import Button from '../components/Button'
-import Photo from '../components/Photo'
+import PageBox from '../components/PageBox'
 import { useToast } from '../components/Toast'
 import { ParseError, parseRecipePhotos } from '../api/claude'
 import { hasApiKey } from '../api/key'
@@ -10,6 +10,7 @@ import { BRING_YOUR_OWN_AI_PROMPT } from '../api/prompts'
 import { savePhoto, saveRecipe } from '../db/repo'
 import { PastedParseError, readPastedParse } from '../lib/pasted-parse'
 import { prepareImage } from '../platform/camera'
+import type { CropRect } from '../lib/types'
 import { copyText } from '../platform/clipboard'
 
 /**
@@ -28,7 +29,12 @@ import { copyText } from '../platform/clipboard'
  * recipe screen offers to read them whenever she has signal. That is the queue, without a
  * new table: an unverified recipe carrying page photos IS a pending parse.
  */
-type Shot = { blob: Blob; width: number; height: number }
+/**
+ * A photographed page. `crop` is the box she drew around the recipe: it decides what gets
+ * SENT, never what gets stored. The whole page is kept because it is the only record of
+ * what the page said when a parse turns out wrong.
+ */
+type Shot = { blob: Blob; width: number; height: number; crop?: CropRect }
 
 export default function RecipeParse() {
   const navigate = useNavigate()
@@ -82,16 +88,19 @@ export default function RecipeParse() {
     setError(null)
     setWorking('Reading the page…')
     try {
+      // Send only the boxed region — it parses better and costs roughly half the tokens.
       const images = await Promise.all(
         shots.map(async (shot) => ({
-          base64: await toBase64(shot.blob),
+          base64: await toBase64(shot.crop ? (await prepareImage(shot.blob, shot.crop)).blob : shot.blob),
           mediaType: 'image/jpeg' as const,
         })),
       )
       const parsed = await parseRecipePhotos(images)
-      // Store the pages first: the photo is the evidence when the parse turns out wrong.
+      // Store the WHOLE page, with the box recorded alongside it rather than baked in.
       const photos = await Promise.all(
-        shots.map((shot) => savePhoto(shot.blob, 'page', { width: shot.width, height: shot.height })),
+        shots.map((shot) =>
+          savePhoto(shot.blob, 'page', { width: shot.width, height: shot.height }, shot.crop),
+        ),
       )
       navigate('/edit', { state: { parsed, photos } })
     } catch (caught) {
@@ -106,7 +115,9 @@ export default function RecipeParse() {
     setWorking('Saving the photos…')
     try {
       const photos = await Promise.all(
-        shots.map((shot) => savePhoto(shot.blob, 'page', { width: shot.width, height: shot.height })),
+        shots.map((shot) =>
+          savePhoto(shot.blob, 'page', { width: shot.width, height: shot.height }, shot.crop),
+        ),
       )
       const recipe = await saveRecipe(
         { title: '', source: { kind: 'book' }, ingredients: [], steps: [], photos },
@@ -160,17 +171,24 @@ export default function RecipeParse() {
         </p>
 
         {shots.length > 0 ? (
-          <ul className="flex flex-wrap gap-2">
+          <ul className="flex flex-col gap-4">
             {shots.map((shot, index) => (
-              <li key={index} className="flex flex-col gap-1">
-                <Photo blob={shot.blob} alt={`Page ${index + 1}`} className="h-28 w-24" />
+              <li key={index} className="flex flex-col gap-2">
+                <PageBox
+                  blob={shot.blob}
+                  crop={shot.crop}
+                  label={`Page ${index + 1}`}
+                  onChange={(crop) =>
+                    setShots((current) => current.map((s, i) => (i === index ? { ...s, crop } : s)))
+                  }
+                />
                 <button
                   type="button"
                   onClick={() => setShots((current) => current.filter((_, i) => i !== index))}
                   aria-label={`Remove page ${index + 1}`}
-                  className="min-h-[44px] font-mono text-[11px] uppercase tracking-[0.08em] text-copper"
+                  className="min-h-[44px] self-start font-mono text-[11px] uppercase tracking-[0.08em] text-copper"
                 >
-                  Remove
+                  Remove this page
                 </button>
               </li>
             ))}

@@ -430,6 +430,18 @@ await page.getByRole('button', { name: 'Read the page' }).waitFor()
 await page.waitForTimeout(300)
 await page.screenshot({ path: `${OUT}/32-parse-pages.png` })
 
+// Box the recipe: what gets SENT narrows, what gets STORED stays the whole page. Better
+// parse, roughly half the image tokens, and the evidence is still there if it goes wrong.
+const firstPage = page.locator('img[alt="Page 1"]')
+const frame = await firstPage.boundingBox()
+await page.mouse.move(frame.x + frame.width * 0.15, frame.y + frame.height * 0.2)
+await page.mouse.down()
+await page.mouse.move(frame.x + frame.width * 0.85, frame.y + frame.height * 0.7, { steps: 12 })
+await page.mouse.up()
+await page.waitForSelector('text=Only the box is sent')
+await page.waitForTimeout(200)
+await page.screenshot({ path: `${OUT}/32c-parse-boxed.png` })
+
 // The offline / no-key path: keep the pages, read them when there is signal. An unverified
 // recipe carrying page photos IS the queue — no extra table, no lost photographs.
 await page.getByRole('button', { name: 'Keep the photos, read them later' }).click()

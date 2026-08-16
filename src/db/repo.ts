@@ -383,10 +383,16 @@ export async function setBookCover(bookUuid: string, blob: Blob, size?: { width:
 /* -------------------------------------------------------------------- photos */
 
 /** Blobs live in their own table so a list query never drags JPEGs into memory. */
-export async function savePhoto(blob: Blob, kind: PhotoRef['kind'], size?: { width: number; height: number }): Promise<PhotoRef> {
+export async function savePhoto(
+  blob: Blob,
+  kind: PhotoRef['kind'],
+  size?: { width: number; height: number },
+  /** Fractional box on a PAGE photo: what was sent to be read. The pixels are all kept. */
+  crop?: PhotoRef['crop'],
+): Promise<PhotoRef> {
   const row: PhotoBlob = { uuid: newId(), blob, mime: blob.type || 'image/jpeg', createdAt: now() }
   await db.photos.put(row)
-  return { uuid: row.uuid, kind, bytes: blob.size, ...(size ?? {}) }
+  return { uuid: row.uuid, kind, bytes: blob.size, ...(size ?? {}), ...(crop ? { crop } : {}) }
 }
 
 export async function getPhotoBlob(uuid: string): Promise<Blob | undefined> {
