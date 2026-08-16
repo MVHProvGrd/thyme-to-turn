@@ -5,6 +5,16 @@ Ideas land here, not in the current branch. Newest at top.
 The habit is the point: every project in this workbench that stayed shippable kept one of
 these, and the one that didn't turned into a six-month project that didn't work yet.
 
+## Came up while building the dinner screen
+
+- "I'm out of butter tonight" — ruling out a staple for one evening without un-stapling it
+  in Settings. Today staples never appear on the grid.
+- Paginate or lazy-render result groups once a group runs past a few dozen cards.
+- Typing in the ingredient field could set `have` directly on Enter (the old plan-doc
+  idea); today it only filters the grid, per the handoff.
+- Alias editing / merging two registry entries in Settings, so `scallion` and `spring
+  onion` stop being two tiles.
+
 ## After the phase-2 gate
 
 Nothing here gets built until the dinner screen has been used for a week and earned its
