@@ -46,9 +46,14 @@ export default function RecipeList() {
         <ScreenHeader
           title="Recipes"
           action={
-            <Button variant="secondary" onClick={() => navigate('/edit')}>
-              + Add
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={() => navigate('/books')}>
+                Books
+              </Button>
+              <Button variant="secondary" onClick={() => navigate('/edit')}>
+                + Add
+              </Button>
+            </div>
           }
         />
       }

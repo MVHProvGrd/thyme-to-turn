@@ -5,6 +5,10 @@ import RecipeDetail from './screens/RecipeDetail'
 import RecipeEdit from './screens/RecipeEdit'
 import Settings from './screens/Settings'
 import Dinner from './screens/Dinner'
+import BookList from './screens/BookList'
+import BookDetail from './screens/BookDetail'
+import BookEdit from './screens/BookEdit'
+import BookScan from './screens/BookScan'
 
 /**
  * The route table. New screens are registered HERE, in one place, plus a nav entry in
@@ -26,6 +30,11 @@ export default function App() {
           <Route path="/recipe/:uuid" element={<RecipeDetail />} />
           <Route path="/edit" element={<RecipeEdit />} />
           <Route path="/edit/:uuid" element={<RecipeEdit />} />
+          <Route path="/books" element={<BookList />} />
+          <Route path="/books/scan" element={<BookScan />} />
+          <Route path="/books/new" element={<BookEdit />} />
+          <Route path="/book/:uuid" element={<BookDetail />} />
+          <Route path="/book/:uuid/edit" element={<BookEdit />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/dinner" replace />} />
         </Routes>

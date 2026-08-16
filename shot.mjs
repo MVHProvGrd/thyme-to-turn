@@ -280,5 +280,44 @@ await page.getByRole('button', { name: 'Soup, not filtering' }).click()
 await page.waitForTimeout(250)
 await page.screenshot({ path: `${OUT}/22-list-category-filter.png` })
 
+/* ----------------------------------------------------------------------- books */
+
+// The shelf, empty.
+await page.goto(`${BASE}#/books`)
+await page.waitForSelector('text=No books yet')
+await page.screenshot({ path: `${OUT}/23-books-empty.png` })
+
+// Typing the ISBN is a first-class path, not a fallback — cameras get denied and iOS has
+// no BarcodeDetector at all. This hits Open Library for real.
+await page.getByRole('button', { name: 'Scan a book' }).click()
+await page.waitForSelector('text=Or type the ISBN')
+await page.screenshot({ path: `${OUT}/24-book-scan.png` })
+await page.getByLabel('Or type the ISBN').fill('9780393020434')
+await page.getByRole('button', { name: 'Look up' }).click()
+await page.waitForURL(/#\/book\//, { timeout: 30000 })
+await page.waitForSelector('text=Judy Rodgers')
+await page.waitForTimeout(2400) // let the toast clear
+await page.screenshot({ path: `${OUT}/25-book-detail.png` })
+
+// Re-scanning a book she already has opens it instead of making a second one.
+await page.goto(`${BASE}#/books/scan`)
+await page.getByLabel('Or type the ISBN').fill('978-0-393-02043-4')
+await page.getByRole('button', { name: 'Look up' }).click()
+await page.waitForURL(/#\/book\//, { timeout: 30000 })
+await page.goto(`${BASE}#/books`)
+await page.waitForSelector('text=The Zuni Café Cookbook')
+const shelf = await page.getByRole('listitem').count()
+if (shelf !== 1) throw new Error(`re-scan duplicated the book: ${shelf} on the shelf`)
+await page.screenshot({ path: `${OUT}/26-books-list.png` })
+
+// A book that no catalogue knows is still a book — typed in by hand.
+await page.goto(`${BASE}#/books/new`)
+await page.getByLabel('Title').fill("Mum's folder")
+await page.getByLabel('Authors — separated by commas').fill('Mum')
+await page.getByLabel('Where it lives').fill('Kitchen drawer')
+await page.screenshot({ path: `${OUT}/27-book-edit.png` })
+await page.getByRole('button', { name: 'Save' }).click()
+await page.waitForURL(/#\/book\//)
+
 console.log('shots written')
 await browser.close()

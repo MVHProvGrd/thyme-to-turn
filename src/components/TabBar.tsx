@@ -8,7 +8,7 @@ import { NavLink } from 'react-router-dom'
  */
 export const TABS = [
   { to: '/dinner', label: 'Dinner', match: ['/dinner'] },
-  { to: '/recipes', label: 'Recipes', match: ['/recipes', '/recipe', '/edit'] },
+  { to: '/recipes', label: 'Recipes', match: ['/recipes', '/recipe', '/edit', '/books', '/book'] },
   { to: '/settings', label: 'Settings', match: ['/settings'] },
 ]
 
