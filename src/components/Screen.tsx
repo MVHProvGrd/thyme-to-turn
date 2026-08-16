@@ -30,7 +30,10 @@ export default function Screen({
 }) {
   const { pathname } = useLocation()
   return (
-    <div className="flex h-dvh flex-col bg-paper">
+    // The sprig sits on the shell, not the scroll region, so it stays put while content
+    // moves over it — a texture in the paper rather than wallpaper sliding past. The tab
+    // bar paints its own `bg-paper` on top, which keeps the chrome clean. See index.css.
+    <div className="flex h-dvh flex-col bg-paper bg-sprig-tile">
       {header ? <div className="shrink-0 border-b border-rule">{header}</div> : null}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
       {tabs ? <TabBar active={pathname} onLeave={onLeave} /> : null}
