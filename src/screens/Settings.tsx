@@ -23,6 +23,7 @@ import {
 } from '../db/repo'
 import { fold } from '../lib/ingredients'
 import { clearApiKey, getApiKey, setApiKey } from '../api/key'
+import { PARSE_MODELS, getParseModel, setParseModel, type ParseModelId } from '../api/claude'
 import {
   addCategoryToList,
   addTagToList,
@@ -75,6 +76,7 @@ export default function Settings() {
   const [newTag, setNewTag] = useState('')
   // Read once into local state; api/key.ts is the only thing that touches the secret.
   const [apiKey, setApiKeyValue] = useState(() => getApiKey())
+  const [parseModel, setParseModelValue] = useState<ParseModelId>(() => getParseModel())
   const [stapleQuery, setStapleQuery] = useState('')
   const [mergeQuery, setMergeQuery] = useState('')
   /** The entry she picked first: the one that will be folded away. */
@@ -329,8 +331,7 @@ export default function Settings() {
             </p>
             <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
               It stays in this browser, never goes into a backup, and is only sent to Anthropic
-              when you ask it to read a photo. Around 8 to 9 cents a recipe, so roughly $13 for a
-              150-recipe book.
+              when you ask it to read a photo.
             </p>
             <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
               A key comes from a separate developer account at console.anthropic.com, with its own
@@ -352,6 +353,42 @@ export default function Settings() {
               Remove the key
             </Button>
           ) : null}
+
+          {/*
+            The price knob. Left visible even without a key, because "what would this cost
+            me?" is the question you ask BEFORE going and setting up billing.
+          */}
+          <div className="flex flex-col gap-1 pt-1">
+            <h3 className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft">
+              How carefully it reads
+            </h3>
+            {PARSE_MODELS.map((option) => (
+              <label key={option.id} className="flex cursor-pointer items-start gap-3 py-[6px]">
+                <input
+                  type="radio"
+                  name="parse-model"
+                  checked={parseModel === option.id}
+                  onChange={() => {
+                    setParseModel(option.id)
+                    setParseModelValue(option.id)
+                  }}
+                  className="mt-[3px] h-[18px] w-[18px] shrink-0 accent-thyme"
+                />
+                <span className="flex flex-col gap-[2px]">
+                  <span className="font-mono text-[13px] text-ink">
+                    {option.label} — {option.cost}
+                  </span>
+                  <span className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+                    {option.blurb}
+                  </span>
+                </span>
+              </label>
+            ))}
+            <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+              You can switch at any time, and a recipe that came back wrong can be read again on
+              the careful setting from its own screen.
+            </p>
+          </div>
         </section>
 
         <Disclosure title="Amounts" note={UNIT_LABELS[unitPreference]}>

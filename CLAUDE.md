@@ -349,7 +349,18 @@ seen the live page.
 
 ## Claude API call (`src/api/claude.ts`)
 
-- Model `claude-opus-5`; `max_tokens: 8000` (thinking is on by default and shares the cap).
+- Two models, her choice, stored in local storage next to the key (never in Dexie, so it
+  cannot ride along in a backup): `claude-haiku-4-5` by DEFAULT — a printed page is the
+  easy case, and it is roughly six times cheaper per recipe — and `claude-opus-5` for
+  handwriting, faded print, or a spread the quick read got wrong. `getParseModel()` falls
+  back to Haiku for any id no longer in `PARSE_MODELS`, so a retired model never silently
+  costs her more. Add a third only with a real reason; two is a choice, five is a menu.
+- `parseRecipePhotos` returns `{ parsed, model }`. The model travels WITH the reading into
+  navigation state, so `recipe.parse.model` records what actually read the page even if she
+  changes the setting while the form is open. Never look it up again at save time.
+- Haiku downscales images to 1568px on the long edge; `MAX_EDGE` here is 2000. That is
+  fine — it means the pages sent are already as detailed as it will ever see.
+- `max_tokens: 8000` (thinking shares the cap on models that think).
 - Use Structured Outputs: `output_config: { format: { type: 'json_schema', schema } }`.
   Not top-level `output_format` (deprecated), not "reply with only JSON" + regex.
 - **No assistant-turn prefill** (400s). **No `temperature`/`top_p`/`top_k`** (rejected).

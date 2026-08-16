@@ -98,8 +98,8 @@ export default function RecipeDetail() {
           mediaType: 'image/jpeg' as const,
         })),
       )
-      const parsed = await parseRecipePhotos(images)
-      navigate(`/edit/${uuid}`, { state: { parsed } })
+      const { parsed, model } = await parseRecipePhotos(images)
+      navigate(`/edit/${uuid}`, { state: { parsed, model } })
     } catch (caught) {
       setPhotoError(caught instanceof ParseError ? caught.message : "That didn't work.")
     } finally {

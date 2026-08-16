@@ -7,7 +7,7 @@ import { Input, Label, Textarea } from '../components/Field'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import Tile from '../components/Tile'
-import { PARSE_MODEL } from '../api/claude'
+import { getParseModel } from '../api/claude'
 import { RECIPE_SCHEMA_VERSION } from '../api/prompts'
 import { deleteRecipe, getRecipe, listBooks, listCategories, listTags, saveRecipe } from '../db/repo'
 import { hasCategory, toggleCategory, unlistedLabels } from '../lib/categories'
@@ -70,7 +70,12 @@ export default function RecipeEdit() {
    * written — the recipe does not exist until she presses Save. Fields the model was unsure
    * of are marked so she checks those first rather than re-reading the whole page.
    */
-  const incoming = (location.state ?? null) as { parsed?: ParsedRecipe; photos?: PhotoRef[] } | null
+  const incoming = (location.state ?? null) as {
+    parsed?: ParsedRecipe
+    photos?: PhotoRef[]
+    /** Which model read it — carried from the parse so the record is what actually ran. */
+    model?: string
+  } | null
   const fromParse = incoming?.parsed ? draftFromParsed(incoming.parsed) : null
 
   const [loaded, setLoaded] = useState(!uuid)
@@ -215,7 +220,7 @@ export default function RecipeEdit() {
         ...(incoming?.parsed
           ? {
               parse: {
-                model: PARSE_MODEL,
+                model: incoming.model ?? getParseModel(),
                 schemaVersion: RECIPE_SCHEMA_VERSION,
                 parsedAt: new Date().toISOString(),
                 lowConfidenceFields: incoming.parsed.lowConfidenceFields ?? [],

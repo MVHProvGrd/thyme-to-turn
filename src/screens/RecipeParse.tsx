@@ -202,14 +202,14 @@ export default function RecipeParse() {
           mediaType: 'image/jpeg' as const,
         })),
       )
-      const parsed = await parseRecipePhotos(images)
+      const { parsed, model } = await parseRecipePhotos(images)
       // Store the WHOLE page, with the box recorded alongside it rather than baked in.
       const photos = await Promise.all(
         shots.map((shot) =>
           savePhoto(shot.blob, 'page', { width: shot.width, height: shot.height }, shot.crop),
         ),
       )
-      navigate('/edit', { state: { parsed, photos } })
+      navigate('/edit', { state: { parsed, photos, model } })
     } catch (caught) {
       setError(caught instanceof ParseError ? caught : new ParseError('bad-response', 'That did not work.'))
     } finally {

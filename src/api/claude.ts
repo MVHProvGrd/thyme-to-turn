@@ -19,10 +19,65 @@
 
 import { getApiKey } from './key'
 import { RECIPE_SCHEMA, RECIPE_SYSTEM_PROMPT } from './prompts'
+import { readPref, writePref } from '../platform/prefs'
 import type { ParsedRecipe } from '../lib/types'
 
-export const PARSE_MODEL = 'claude-opus-5'
 export const MAX_TOKENS = 8000
+
+/**
+ * Which model reads the page. Two, deliberately, and not more: a cheap one that handles a
+ * clean printed page, and an expensive one for when the cheap one comes back wrong.
+ *
+ * Haiku is the default because a printed cookbook page is the easy case and the difference
+ * is roughly six times the price per recipe. It downscales images to 1568px on the long
+ * edge, so the pages this app already sends are as detailed as it will ever see.
+ *
+ * The choice is stored next to the key in local storage rather than in Dexie, so it never
+ * rides along in a backup and never needs a schema bump.
+ */
+export type ParseModelId = 'claude-haiku-4-5' | 'claude-opus-5'
+
+export type ParseModel = {
+  id: ParseModelId
+  label: string
+  /** Per recipe, in money rather than tokens — the only unit that means anything to her. */
+  cost: string
+  blurb: string
+}
+
+export const PARSE_MODELS: ParseModel[] = [
+  {
+    id: 'claude-haiku-4-5',
+    label: 'Quick read',
+    cost: 'about 1 to 2 cents a recipe',
+    blurb: 'Fast, and cheap enough to photograph a whole shelf. Fine on a clean printed page.',
+  },
+  {
+    id: 'claude-opus-5',
+    label: 'Careful read',
+    cost: 'about 8 to 9 cents a recipe',
+    blurb: 'Slower and dearer. Worth it for handwriting, a faded page, or a spread the quick read got wrong.',
+  },
+]
+
+export const DEFAULT_PARSE_MODEL: ParseModelId = 'claude-haiku-4-5'
+
+const MODEL_PREF = 'parseModel'
+
+export function getParseModel(): ParseModelId {
+  const stored = readPref<string>(MODEL_PREF, DEFAULT_PARSE_MODEL)
+  return PARSE_MODELS.some((model) => model.id === stored)
+    ? (stored as ParseModelId)
+    : DEFAULT_PARSE_MODEL
+}
+
+export function setParseModel(id: ParseModelId): void {
+  writePref(MODEL_PREF, id)
+}
+
+export function parseModelLabel(id: string): string {
+  return PARSE_MODELS.find((model) => model.id === id)?.label ?? id
+}
 
 /** Every failure she can hit, each with a sentence that says what to do about it. */
 export type ParseFailure =
@@ -64,13 +119,23 @@ export function parseErrorFor(kind: ParseFailure, detail?: string): ParseError {
 
 export type PageImage = { base64: string; mediaType: 'image/jpeg' | 'image/png' | 'image/webp' }
 
+/**
+ * What came back, and which model said it. The model travels with the reading rather than
+ * being looked up again at save time, so `recipe.parse.model` records what actually read
+ * the page even if she changes the setting while the form is open.
+ */
+export type PageReading = { parsed: ParsedRecipe; model: ParseModelId }
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
  * Photos in, a structured recipe out. Nothing is written to the database here — the
  * result goes to the verification form and only exists once she presses Save.
  */
-export async function parseRecipePhotos(images: PageImage[]): Promise<ParsedRecipe> {
+export async function parseRecipePhotos(
+  images: PageImage[],
+  model: ParseModelId = getParseModel(),
+): Promise<PageReading> {
   const apiKey = getApiKey()
   if (!apiKey) throw parseErrorFor('no-key')
   if (images.length === 0) throw parseErrorFor('bad-response', 'No photos were given to parse.')
@@ -88,7 +153,7 @@ export async function parseRecipePhotos(images: PageImage[]): Promise<ParsedReci
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const response = await client.messages.create({
-        model: PARSE_MODEL,
+        model,
         max_tokens: MAX_TOKENS,
         system: RECIPE_SYSTEM_PROMPT,
         output_config: { format: { type: 'json_schema', schema: RECIPE_SCHEMA } },
@@ -106,7 +171,7 @@ export async function parseRecipePhotos(images: PageImage[]): Promise<ParsedReci
         ],
       } as Parameters<typeof client.messages.create>[0])
 
-      return readResponse(response)
+      return { parsed: readResponse(response), model }
     } catch (caught) {
       const status = statusOf(caught)
       if (caught instanceof ParseError) throw caught
