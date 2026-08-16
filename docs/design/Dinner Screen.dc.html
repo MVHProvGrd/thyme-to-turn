@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body { margin:0; background:#EDE9DC; }
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes rise { from { opacity:0; transform:translateY(6px);} to {opacity:1; transform:none;} }
+  }
+  *:focus-visible { outline:2px solid #2F5320; outline-offset:3px; }
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;justify-content:center;background:#EDE9DC;padding:0">
+  <div style="width:390px;min-height:844px;background:#F6F3E9;color:#1F2A16;font-family:Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;display:flex;flex-direction:column;position:relative;box-shadow:0 0 0 1px #DED8C6">
+
+    <div style="padding:22px 20px 14px;background:#F6F3E9;position:sticky;top:0;z-index:5;border-bottom:1px solid #DED8C6">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+        <h1 style="margin:0;font-size:27px;line-height:1.1;font-weight:600;color:#2F5320;letter-spacing:-0.01em">What can I make?</h1>
+        <button onClick="{{ reset }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#4C5940;background:transparent;border:1px solid #DED8C6;border-radius:999px;padding:9px 13px;min-height:44px;cursor:pointer">Reset</button>
+      </div>
+      <p style="margin:8px 0 0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;letter-spacing:0.02em;color:#4C5940">{{ tally }}</p>
+    </div>
+
+    <div style="padding:16px 20px 4px">
+      <input type="text" placeholder="type an ingredient…" value="{{ query }}" onChange="{{ onQuery }}" aria-label="Filter ingredients" style="width:100%;box-sizing:border-box;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:14px;color:#1F2A16;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:13px 14px;min-height:44px" />
+    </div>
+
+    <div role="group" aria-label="Ingredients" style="display:flex;flex-wrap:wrap;gap:8px;padding:14px 20px 18px">
+      <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="14">
+        <button onClick="{{ t.toggle }}" aria-label="{{ t.aria }}" style="{{ t.style }}">{{ t.label }}</button>
+      </sc-for>
+      <sc-if value="{{ noTiles }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:2px 0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#4C5940">No ingredient by that name.</p>
+      </sc-if>
+    </div>
+
+    <div style="height:1px;background:#DED8C6"></div>
+
+    <div style="flex:1;padding:6px 20px 120px;display:flex;flex-direction:column;gap:26px">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+        <section style="{{ g.wrapStyle }}">
+          <header style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:14px 0 10px">
+            <h2 style="{{ g.headStyle }}">{{ g.label }}</h2>
+            <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#4C5940">{{ g.count }}</span>
+          </header>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ g.items }}" as="r" hint-placeholder-count="3">
+              <article style="background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:14px 15px 13px;display:flex;flex-direction:column;gap:7px">
+                <h3 style="margin:0;font-size:19px;line-height:1.25;font-weight:600;color:#1F2A16;text-wrap:pretty">{{ r.title }}</h3>
+                <p style="margin:0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;line-height:1.5;color:#4C5940;text-wrap:pretty">{{ r.source }}</p>
+                <sc-if value="{{ r.hasMissing }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:2px">
+                    <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;font-weight:600;color:#9E5632">missing:</span>
+                    <sc-for list="{{ r.missing }}" as="m" hint-placeholder-count="1">
+                      <button onClick="{{ m.add }}" aria-label="{{ m.aria }}" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px 0 11px;background:rgba(158,86,50,0.10);border:none;border-radius:999px;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;font-weight:600;color:#9E5632;cursor:pointer">{{ m.name }}<span style="font-size:15px;line-height:1;opacity:0.75">+</span></button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ r.hasNotSure }}" hint-placeholder-val="{{ true }}">
+                  <p style="margin:0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;line-height:1.5;color:#4C5940;text-wrap:pretty">not sure: {{ r.notSure }}</p>
+                </sc-if>
+              </article>
+            </sc-for>
+          </div>
+        </section>
+      </sc-for>
+
+      <sc-if value="{{ showNothing }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:28px 20px;display:flex;flex-direction:column;align-items:flex-start;gap:12px;margin-top:18px">
+          <p style="margin:0;font-size:19px;line-height:1.35;color:#1F2A16;text-wrap:pretty">Nothing matches. Un-tap something, or add a recipe.</p>
+          <button onClick="{{ reset }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#F6F3E9;background:#2F5320;border:none;border-radius:2px;padding:0 18px;min-height:44px;cursor:pointer">Reset</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showFew }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:4px 0 0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;line-height:1.6;color:#4C5940">Add more recipes and this gets a lot better.</p>
+      </sc-if>
+    </div>
+
+    <div style="position:sticky;bottom:0;padding:14px 20px 22px;background:linear-gradient(to top, #F6F3E9 62%, rgba(246,243,233,0));display:flex;gap:10px">
+      <button style="flex:1;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;color:#F6F3E9;background:#2F5320;border:none;border-radius:2px;min-height:52px;cursor:pointer">Cook the first one</button>
+      <button style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;color:#2F5320;background:transparent;border:1px solid #2F5320;border-radius:2px;padding:0 16px;min-height:52px;cursor:pointer">All 47</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844}}">
+const MONO = 'ui-monospace, SF Mono, Menlo, Consolas, monospace';
+
+const ING = [
+  ['chicken','🍗'],['onion','🧅'],['garlic','🧄'],['lemon','🍋'],['parmesan',''],['cream',''],
+  ['eggs','🥚'],['tomatoes','🍅'],['bacon','🥓'],['anchovy',''],['rice','🍚'],['thyme','🌿'],
+  ['butter',''],['fennel',''],['potatoes','🥔'],['spinach',''],['chickpeas',''],['yogurt',''],
+  ['chilli','🌶'],['mushrooms','🍄'],['bread','🍞'],['pasta',''],['white wine',''],['carrots','🥕'],
+  ['capers',''],['flour','']
+];
+
+const RECIPES = [
+  ['Chicken with fennel, cream and a great deal of thyme','The Zuni Café Cookbook · Judy Rodgers · p.214',['chicken','fennel','cream','thyme','butter']],
+  ['Spaghetti with garlic, anchovy and chilli','The River Cafe Cookbook · Rogers & Gray · p.88',['pasta','garlic','anchovy','chilli']],
+  ['Braised fennel gratin','Vegetable Literacy · Deborah Madison · p.161',['fennel','parmesan','cream','butter','thyme']],
+  ['Roast chicken with bread salad','The Zuni Café Cookbook · Judy Rodgers · p.190',['chicken','bread','garlic','onion','butter']],
+  ['Chickpeas with spinach and yogurt','Jerusalem · Ottolenghi & Tamimi · p.72',['chickpeas','spinach','yogurt','garlic','lemon']],
+  ['Carbonara, done slowly','The Silver Spoon · p.301',['pasta','eggs','bacon','parmesan']],
+  ['Onion soup that takes all afternoon','Mastering the Art of French Cooking · p.43',['onion','butter','bread','white wine','thyme']],
+  ['Tomato and bread soup','The River Cafe Cookbook · Rogers & Gray · p.54',['tomatoes','bread','garlic']],
+  ['Lemon and thyme roast potatoes','Simple · Ottolenghi · p.128',['potatoes','lemon','thyme','garlic']],
+  ['Mushrooms on toast with too much butter','Nigel Slater · Real Fast Food · p.96',['mushrooms','bread','butter','garlic']],
+  ['Baked rice with tomatoes and onion','The Book of New Israeli Food · p.212',['rice','tomatoes','onion','butter']],
+  ['Spinach and parmesan frittata','The Silver Spoon · p.412',['eggs','spinach','parmesan','onion']],
+  ['Chicken thighs with capers and lemon','Simple · Ottolenghi · p.64',['chicken','capers','lemon','garlic','butter']],
+  ['Carrots braised with butter and thyme','Vegetable Literacy · Deborah Madison · p.204',['carrots','butter','thyme']],
+  ['Bacon, egg and potato hash','Real Fast Food · Nigel Slater · p.51',['bacon','eggs','potatoes','onion']],
+  ['Chickpea and tomato stew with chilli','Jerusalem · Ottolenghi & Tamimi · p.118',['chickpeas','tomatoes','chilli','onion','garlic']],
+  ['Risotto with white wine and parmesan','The Silver Spoon · p.278',['rice','white wine','parmesan','butter','onion']],
+  ['Anchovy and butter toasts','The River Cafe Cookbook · Rogers & Gray · p.22',['anchovy','butter','bread']],
+  ['Yogurt flatbreads','Jerusalem · Ottolenghi & Tamimi · p.246',['yogurt','flour']],
+  ['Mushroom risotto','The Silver Spoon · p.281',['rice','mushrooms','white wine','parmesan','butter','onion']],
+  ['Potato and onion tortilla','The Book of Tapas · p.34',['potatoes','onion','eggs']],
+  ['Buttered spinach with lemon','Vegetable Literacy · Deborah Madison · p.98',['spinach','butter','lemon']],
+  ['Pasta with tomatoes, garlic and torn bread','Real Fast Food · Nigel Slater · p.140',['pasta','tomatoes','garlic','bread']],
+  ['Chicken and rice with lemon and capers','Simple · Ottolenghi · p.190',['chicken','rice','lemon','capers','onion']]
+];
+
+const TOTAL = 47;
+
+class Component extends DCLogic {
+  state = { marks: {}, query: '' };
+
+  cycle(name) {
+    this.setState(s => {
+      const cur = s.marks[name] || 'unknown';
+      const next = cur === 'unknown' ? 'dontHave' : cur === 'dontHave' ? 'have' : 'unknown';
+      const marks = Object.assign({}, s.marks);
+      if (next === 'unknown') delete marks[name]; else marks[name] = next;
+      return { marks };
+    });
+  }
+
+  set(name, val) {
+    this.setState(s => Object.assign({}, { marks: Object.assign({}, s.marks, { [name]: val }) }));
+  }
+
+  tileStyle(state) {
+    const base = {
+      display: 'inline-flex', alignItems: 'center', gap: '6px', minHeight: '44px',
+      padding: '0 14px', borderRadius: '999px', cursor: 'pointer',
+      fontFamily: MONO, fontSize: '13px', letterSpacing: '0.01em',
+      maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+    };
+    if (state === 'have') return Object.assign(base, { background: 'rgba(127,176,63,0.16)', border: 'none', color: '#2F5320', fontWeight: 600 });
+    if (state === 'dontHave') return Object.assign(base, { background: 'rgba(158,86,50,0.12)', border: 'none', color: '#9E5632', textDecoration: 'line-through', textDecorationThickness: '1.5px' });
+    return Object.assign(base, { background: '#FCFAF3', border: '1px solid #DED8C6', color: '#1F2A16' });
+  }
+
+  renderVals() {
+    const marks = this.state.marks;
+    const q = this.state.query.trim().toLowerCase();
+
+    const tiles = ING.filter(([n]) => !q || n.includes(q)).map(([n, emoji]) => {
+      const st = marks[n] || 'unknown';
+      const short = n.length > 14 ? n.slice(0, 13) + '…' : n;
+      return {
+        label: (st === 'have' ? '✓ ' : '') + (emoji ? emoji + ' ' : '') + short,
+        aria: n + ', ' + (st === 'have' ? 'have' : st === 'dontHave' ? 'ruled out' : 'not marked'),
+        style: this.tileStyle(st),
+        toggle: () => this.cycle(n)
+      };
+    });
+
+    const scored = RECIPES.map(([title, source, ings]) => {
+      const missing = ings.filter(i => marks[i] === 'dontHave');
+      const notSure = ings.filter(i => !marks[i]);
+      return { title, source, ings, missing, notSure };
+    });
+
+    const mk = r => ({
+      title: r.title,
+      source: r.source,
+      hasMissing: r.missing.length > 0,
+      hasNotSure: r.notSure.length > 0,
+      notSure: r.notSure.join(', '),
+      missing: r.missing.map(n => ({ name: n, aria: 'add ' + n + ' to what you have', add: () => this.set(n, 'have') }))
+    });
+
+    const simplest = (a, b) => (a.notSure.length - b.notSure.length) || (a.ings.length - b.ings.length);
+    const ready = scored.filter(r => r.missing.length === 0).sort(simplest);
+    const one = scored.filter(r => r.missing.length === 1).sort(simplest);
+    const ruledOut = scored.filter(r => r.missing.length > 1);
+
+    const head = { margin: 0, fontFamily: MONO, fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 600, color: '#4C5940' };
+    const groups = [];
+    if (ready.length) groups.push({ label: 'Ready to cook', count: ready.length, items: ready.slice(0, 6).map(mk), wrapStyle: {}, headStyle: head });
+    if (one.length) groups.push({
+      label: 'One thing away', count: one.length, items: one.slice(0, 6).map(mk),
+      wrapStyle: { borderLeft: '2px solid #7FB03F', paddingLeft: '14px', marginLeft: '-16px' },
+      headStyle: Object.assign({}, head, { color: '#2F5320' })
+    });
+
+    return {
+      tiles,
+      noTiles: tiles.length === 0,
+      groups,
+      query: this.state.query,
+      onQuery: e => this.setState({ query: e.target.value }),
+      tally: TOTAL + ' recipes · ' + ready.length + ' ready · ' + ruledOut.length + ' ruled out',
+      showNothing: ready.length === 0 && one.length === 0,
+      showFew: false,
+      reset: () => this.setState({ marks: {}, query: '' })
+    };
+  }
+}
+</script>
+</body>
+</html>

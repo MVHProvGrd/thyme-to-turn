@@ -12,6 +12,10 @@ dist-ssr
 
 .claude/settings.local.json
 
+# Screenshot output from shot.mjs. The script is committed; the PNGs are not — they
+# regenerate in seconds and would add a megabyte per phase to the repo.
+shots
+
 .DS_Store
 *.log
 npm-debug.log*

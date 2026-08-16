@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body { margin:0; background:#EDE9DC; }
+  *:focus-visible { outline:2px solid #2F5320; outline-offset:3px; }
+  input, textarea, button { font-family:inherit; }
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;justify-content:center;background:#EDE9DC">
+  <div style="width:390px;height:844px;overflow:hidden;background:#F6F3E9;color:#1F2A16;font-family:Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;display:flex;flex-direction:column;position:relative;box-shadow:0 0 0 1px #DED8C6">
+
+    <sc-if value="{{ isDinner }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:22px 20px 14px;border-bottom:1px solid #DED8C6">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+            <h1 style="margin:0;font-size:27px;line-height:1.1;font-weight:600;color:#2F5320;letter-spacing:-0.01em">What can I make?</h1>
+            <button onClick="{{ reset }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#4C5940;background:transparent;border:1px solid #DED8C6;border-radius:999px;padding:9px 13px;min-height:44px;cursor:pointer">Reset</button>
+          </div>
+          <p style="margin:8px 0 0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#4C5940">{{ tally }}</p>
+        </div>
+
+        <div style="flex:1;overflow-y:auto">
+          <div style="padding:16px 20px 4px">
+            <input type="text" placeholder="type an ingredient…" value="{{ query }}" onChange="{{ onQuery }}" aria-label="Filter ingredients" style="width:100%;box-sizing:border-box;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:14px;color:#1F2A16;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:13px 14px;min-height:44px" />
+          </div>
+          <div role="group" aria-label="Ingredients" style="display:flex;flex-wrap:wrap;gap:8px;padding:14px 20px 18px;border-bottom:1px solid #DED8C6">
+            <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="14">
+              <button onClick="{{ t.toggle }}" aria-label="{{ t.aria }}" style="{{ t.style }}">{{ t.label }}</button>
+            </sc-for>
+            <sc-if value="{{ noTiles }}" hint-placeholder-val="{{ false }}">
+              <p style="margin:2px 0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#4C5940">No ingredient by that name.</p>
+            </sc-if>
+          </div>
+
+          <div style="padding:6px 20px 24px;display:flex;flex-direction:column;gap:22px">
+            <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+              <section style="{{ g.wrapStyle }}">
+                <header style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:14px 0 10px">
+                  <h2 style="{{ g.headStyle }}">{{ g.label }}</h2>
+                  <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#4C5940">{{ g.count }}</span>
+                </header>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <sc-for list="{{ g.items }}" as="r" hint-placeholder-count="3">
+                    <article style="background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;display:flex;flex-direction:column">
+                      <button onClick="{{ r.open }}" style="text-align:left;background:transparent;border:none;padding:14px 15px 4px;cursor:pointer;display:flex;flex-direction:column;gap:6px">
+                        <h3 style="margin:0;font-family:Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;font-size:19px;line-height:1.25;font-weight:600;color:#1F2A16;text-wrap:pretty">{{ r.title }}</h3>
+                        <p style="margin:0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;line-height:1.5;color:#4C5940;text-wrap:pretty">{{ r.source }}</p>
+                      </button>
+                      <div style="padding:0 15px 12px;display:flex;flex-direction:column;gap:4px">
+                        <sc-if value="{{ r.hasMissing }}" hint-placeholder-val="{{ true }}">
+                          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+                            <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;font-weight:600;color:#9E5632">missing:</span>
+                            <sc-for list="{{ r.missing }}" as="m" hint-placeholder-count="1">
+                              <button onClick="{{ m.add }}" aria-label="{{ m.aria }}" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px 0 11px;background:rgba(158,86,50,0.10);border:none;border-radius:999px;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;font-weight:600;color:#9E5632;cursor:pointer">{{ m.name }}<span style="font-size:15px;line-height:1;opacity:0.75">+</span></button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ r.hasNotSure }}" hint-placeholder-val="{{ true }}">
+                          <p style="margin:0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;line-height:1.5;color:#4C5940;text-wrap:pretty">not sure: {{ r.notSure }}</p>
+                        </sc-if>
+                      </div>
+                    </article>
+                  </sc-for>
+                </div>
+              </section>
+            </sc-for>
+
+            <sc-if value="{{ showNothing }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:28px 20px;display:flex;flex-direction:column;align-items:flex-start;gap:12px;margin-top:14px">
+                <p style="margin:0;font-size:19px;line-height:1.35;text-wrap:pretty">Nothing matches. Un-tap something, or add a recipe.</p>
+                <button onClick="{{ reset }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#F6F3E9;background:#2F5320;border:none;border-radius:2px;padding:0 18px;min-height:44px;cursor:pointer">Reset</button>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:22px 20px 14px;border-bottom:1px solid #DED8C6;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+            <h1 style="margin:0;font-size:27px;line-height:1.1;font-weight:600;color:#2F5320">Recipes</h1>
+            <button onClick="{{ newRecipe }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#2F5320;background:transparent;border:1px solid #2F5320;border-radius:999px;padding:9px 13px;min-height:44px;cursor:pointer">+ Add</button>
+          </div>
+          <input type="text" placeholder="search recipes and books…" value="{{ listQuery }}" onChange="{{ onListQuery }}" aria-label="Search recipes" style="width:100%;box-sizing:border-box;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:14px;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:13px 14px;min-height:44px" />
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:4px 20px 24px">
+          <sc-for list="{{ listRows }}" as="r" hint-placeholder-count="8">
+            <button onClick="{{ r.open }}" style="width:100%;text-align:left;background:transparent;border:none;border-bottom:1px solid #DED8C6;padding:16px 0;cursor:pointer;display:flex;flex-direction:column;gap:5px">
+              <span style="font-family:Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;font-size:19px;line-height:1.25;color:#1F2A16;text-wrap:pretty">{{ r.title }}</span>
+              <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;line-height:1.5;color:#4C5940;text-wrap:pretty">{{ r.source }}</span>
+            </button>
+          </sc-for>
+          <sc-if value="{{ noListRows }}" hint-placeholder-val="{{ false }}">
+            <p style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#4C5940;padding-top:20px">No recipe by that name.</p>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:18px 20px 12px;border-bottom:1px solid #DED8C6;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <button onClick="{{ back }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#4C5940;background:transparent;border:none;min-height:44px;padding:0 8px 0 0;cursor:pointer">← Back</button>
+          <div style="display:flex;gap:8px">
+            <button onClick="{{ toggleCook }}" style="{{ cookBtnStyle }}">{{ cookBtnLabel }}</button>
+            <button onClick="{{ editRecipe }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#4C5940;background:transparent;border:1px solid #DED8C6;border-radius:999px;padding:0 13px;min-height:44px;cursor:pointer">Edit</button>
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:20px 20px 32px;display:flex;flex-direction:column;gap:22px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <h1 style="{{ detailTitleStyle }}">{{ recipe.title }}</h1>
+            <button onClick="{{ noop }}" style="text-align:left;background:transparent;border:none;padding:0;cursor:pointer;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;line-height:1.6;color:#2F5320;text-decoration:underline;text-underline-offset:3px;text-wrap:pretty">{{ recipe.source }}</button>
+          </div>
+
+          <section style="background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:16px 16px 14px">
+            <h2 style="margin:0 0 12px;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;font-weight:600;color:#4C5940">Ingredients</h2>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ recipe.lines }}" as="l" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:88px 1fr auto;gap:10px;align-items:baseline">
+                  <span style="{{ qtyStyle }}">{{ l.qty }}</span>
+                  <span style="{{ itemStyle }}">{{ l.item }}</span>
+                  <span style="{{ l.markStyle }}">{{ l.mark }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section>
+            <h2 style="margin:0 0 12px;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;font-weight:600;color:#4C5940">Method</h2>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
+                <button onClick="{{ s.toggle }}" style="{{ s.rowStyle }}">
+                  <span style="{{ s.numStyle }}">{{ s.num }}</span>
+                  <span style="{{ s.textStyle }}">{{ s.text }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </section>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isEdit }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:18px 20px 12px;border-bottom:1px solid #DED8C6;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <button onClick="{{ back }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#4C5940;background:transparent;border:none;min-height:44px;padding:0 8px 0 0;cursor:pointer">← Cancel</button>
+          <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#4C5940">{{ editTitle }}</span>
+          <button onClick="{{ save }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#F6F3E9;background:#2F5320;border:none;border-radius:2px;padding:0 15px;min-height:44px;cursor:pointer">Save</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:18px 20px 32px;display:flex;flex-direction:column;gap:18px">
+          <label style="display:flex;flex-direction:column;gap:7px">
+            <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#4C5940">Title</span>
+            <input type="text" value="{{ draft.title }}" onChange="{{ onDraftTitle }}" style="width:100%;box-sizing:border-box;font-family:Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;font-size:19px;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:12px 13px;min-height:48px" />
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 88px;gap:10px">
+            <label style="display:flex;flex-direction:column;gap:7px">
+              <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#4C5940">Book</span>
+              <input type="text" value="{{ draft.book }}" onChange="{{ onDraftBook }}" style="width:100%;box-sizing:border-box;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:13px;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:12px 13px;min-height:48px" />
+            </label>
+            <label style="display:flex;flex-direction:column;gap:7px">
+              <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#4C5940">Page</span>
+              <input type="text" value="{{ draft.page }}" onChange="{{ onDraftPage }}" style="width:100%;box-sizing:border-box;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:13px;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:12px 13px;min-height:48px" />
+            </label>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#4C5940">Ingredients</span>
+            <sc-for list="{{ draftLines }}" as="l" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:88px 1fr 44px;gap:8px">
+                <input type="text" value="{{ l.qty }}" onChange="{{ l.onQty }}" aria-label="quantity" style="width:100%;box-sizing:border-box;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:13px;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:11px 10px;min-height:44px" />
+                <input type="text" value="{{ l.item }}" onChange="{{ l.onItem }}" aria-label="ingredient" style="width:100%;box-sizing:border-box;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:13px;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:11px 10px;min-height:44px" />
+                <button onClick="{{ l.remove }}" aria-label="remove line" style="min-height:44px;background:transparent;border:1px solid #DED8C6;border-radius:2px;color:#9E5632;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:15px;cursor:pointer">−</button>
+              </div>
+            </sc-for>
+            <button onClick="{{ addLine }}" style="align-self:flex-start;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;color:#2F5320;background:transparent;border:1px dashed #DED8C6;border-radius:2px;padding:0 14px;min-height:44px;cursor:pointer">+ Add a line</button>
+          </div>
+          <label style="display:flex;flex-direction:column;gap:7px">
+            <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#4C5940">Method — one step per line</span>
+            <textarea rows="7" value="{{ draft.method }}" onChange="{{ onDraftMethod }}" style="width:100%;box-sizing:border-box;font-family:Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;font-size:16px;line-height:1.5;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:12px 13px"></textarea>
+          </label>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:22px 20px 14px;border-bottom:1px solid #DED8C6">
+          <h1 style="margin:0;font-size:27px;line-height:1.1;font-weight:600;color:#2F5320">Settings</h1>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:18px 20px 32px;display:flex;flex-direction:column;gap:24px">
+          <div style="display:flex;gap:11px;background:#FCFAF3;border:1px solid #DED8C6;border-left:2px solid #7FB03F;border-radius:2px;padding:13px 14px">
+            <p style="margin:0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;line-height:1.6;color:#4C5940;text-wrap:pretty">Everything works offline. The key is only used to read a photographed page.</p>
+          </div>
+          <label style="display:flex;flex-direction:column;gap:7px">
+            <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#4C5940">API key</span>
+            <input type="text" value="{{ apiKey }}" onChange="{{ onApiKey }}" placeholder="paste your key" style="width:100%;box-sizing:border-box;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:13px;background:#FCFAF3;border:1px solid #DED8C6;border-radius:2px;padding:12px 13px;min-height:48px" />
+            <span style="{{ keyNoteStyle }}">{{ keyNote }}</span>
+          </label>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#4C5940">Staples — never counted as missing</span>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ staples }}" as="s" hint-placeholder-count="6">
+                <button onClick="{{ s.toggle }}" aria-label="{{ s.aria }}" style="{{ s.style }}">{{ s.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <span style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#4C5940">Your library</span>
+            <p style="margin:0;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;line-height:1.7;color:#4C5940">{{ libraryLine }}</p>
+            <div style="display:flex;gap:9px;flex-wrap:wrap">
+              <button onClick="{{ exportAll }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#F6F3E9;background:#2F5320;border:none;border-radius:2px;padding:0 16px;min-height:48px;cursor:pointer">Export as JSON</button>
+              <button onClick="{{ noop }}" style="font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#9E5632;background:transparent;border:1px solid rgba(158,86,50,0.45);border-radius:2px;padding:0 16px;min-height:48px;cursor:pointer">Delete everything</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:20px;right:20px;bottom:96px;background:#1F2A16;color:#F6F3E9;border-radius:2px;padding:14px 16px;font-family:ui-monospace, SF Mono, Menlo, Consolas, monospace;font-size:12px;letter-spacing:0.02em;z-index:20">{{ toast }}</div>
+    </sc-if>
+
+    <nav style="display:flex;border-top:1px solid #DED8C6;background:#F6F3E9">
+      <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+        <button onClick="{{ t.go }}" aria-label="{{ t.label }}" style="{{ t.style }}">{{ t.label }}</button>
+      </sc-for>
+    </nav>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844}}">
+const MONO = 'ui-monospace, SF Mono, Menlo, Consolas, monospace';
+const SERIF = 'Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif';
+
+const ING = [
+  ['chicken','🍗'],['onion','🧅'],['garlic','🧄'],['lemon','🍋'],['parmesan',''],['cream',''],
+  ['eggs','🥚'],['tomatoes','🍅'],['bacon','🥓'],['anchovy',''],['rice','🍚'],['thyme','🌿'],
+  ['butter',''],['fennel',''],['potatoes','🥔'],['spinach',''],['chickpeas',''],['yogurt',''],
+  ['chilli','🌶'],['mushrooms','🍄'],['bread','🍞'],['pasta',''],['white wine',''],['carrots','🥕'],
+  ['capers',''],['flour','']
+];
+
+const RECIPES = [
+  { id:1, title:'Chicken with fennel, cream and a great deal of thyme', book:'The Zuni Café Cookbook · Judy Rodgers', page:'p.214',
+    lines:[['1 whole','chicken, jointed'],['2 bulbs','fennel'],['200 ml','cream'],['6 sprigs','thyme'],['30 g','butter']],
+    steps:['Salt the chicken the night before and leave it uncovered in the fridge.','Brown the pieces in butter, skin down, until the skin is properly dark.','Add the fennel cut in thick wedges and let it take colour in the fat.','Pour in the cream, tuck in the thyme, cover, and hold at a bare simmer for 35 minutes.','Rest ten minutes off the heat before serving — the sauce tightens as it sits.'] },
+  { id:2, title:'Spaghetti with garlic, anchovy and chilli', book:'The River Cafe Cookbook · Rogers & Gray', page:'p.88',
+    lines:[['400 g','pasta'],['4 cloves','garlic'],['8 fillets','anchovy'],['1 dried','chilli']],
+    steps:['Boil the pasta in water salted like the sea.','Warm the sliced garlic in plenty of oil until it smells sweet, not brown.','Melt the anchovies into the oil with the crumbled chilli.','Drain the pasta wet and finish it in the pan with a splash of its water.'] },
+  { id:3, title:'Braised fennel gratin', book:'Vegetable Literacy · Deborah Madison', page:'p.161',
+    lines:[['3 bulbs','fennel'],['60 g','parmesan'],['150 ml','cream'],['20 g','butter'],['4 sprigs','thyme']],
+    steps:['Halve the fennel and braise it in butter and a little water until a knife slides through.','Lay it in a buttered dish, pour over the cream, scatter the thyme.','Cover with parmesan and bake at 200°C / 400°F for 25 minutes until blistered.'] },
+  { id:4, title:'Roast chicken with bread salad', book:'The Zuni Café Cookbook · Judy Rodgers', page:'p.190',
+    lines:[['1 small','chicken'],['½ loaf','bread, torn'],['2 cloves','garlic'],['1','onion'],['40 g','butter']],
+    steps:['Roast the chicken hot and fast, 230°C / 450°F, turning it twice.','Tear the bread and toast the pieces in butter and garlic.','Soften the sliced onion in the roasting juices.','Toss bread, onion and all the pan drippings together and sit the carved chicken on top.'] },
+  { id:5, title:'Chickpeas with spinach and yogurt', book:'Jerusalem · Ottolenghi & Tamimi', page:'p.72',
+    lines:[['500 g','chickpeas, cooked'],['200 g','spinach'],['150 g','yogurt'],['2 cloves','garlic'],['1','lemon']],
+    steps:['Warm the chickpeas in their own liquor with the crushed garlic.','Wilt the spinach in at the last minute so it keeps its colour.','Beat the yogurt smooth with lemon juice and salt.','Spoon the chickpeas over the yogurt, not under it.'] },
+  { id:6, title:'Carbonara, done slowly', book:'The Silver Spoon', page:'p.301',
+    lines:[['400 g','pasta'],['4','eggs'],['150 g','bacon'],['80 g','parmesan']],
+    steps:['Render the bacon slowly until the fat runs clear.','Beat the eggs with the parmesan and a lot of black pepper.','Off the heat, toss the drained pasta with the bacon fat, then the eggs.','Loosen with pasta water until it pours.'] },
+  { id:7, title:'Onion soup that takes all afternoon', book:'Mastering the Art of French Cooking', page:'p.43',
+    lines:[['1.5 kg','onions'],['60 g','butter'],['4 slices','bread'],['200 ml','white wine'],['4 sprigs','thyme']],
+    steps:['Slice the onions thin and cook them in butter, stirring, for a full hour.','Deglaze with the wine and let it cook away.','Add water or stock and the thyme; simmer 40 minutes.','Float toasted bread on top and grill until the edges catch.'] },
+  { id:8, title:'Tomato and bread soup', book:'The River Cafe Cookbook · Rogers & Gray', page:'p.54',
+    lines:[['1 kg','tomatoes'],['½ loaf','stale bread'],['3 cloves','garlic']],
+    steps:['Cook the tomatoes down with the garlic until they collapse.','Tear in the bread and stir until it dissolves into the soup.','Rest it off the heat for twenty minutes; serve warm, not hot, with oil.'] },
+  { id:9, title:'Lemon and thyme roast potatoes', book:'Simple · Ottolenghi', page:'p.128',
+    lines:[['1 kg','potatoes'],['1','lemon'],['6 sprigs','thyme'],['3 cloves','garlic']],
+    steps:['Parboil the potatoes and rough them up in the colander.','Roast at 220°C / 425°F with the garlic and thyme for 40 minutes.','Grate lemon zest over the moment they leave the oven.'] },
+  { id:10, title:'Mushrooms on toast with too much butter', book:'Real Fast Food · Nigel Slater', page:'p.96',
+    lines:[['300 g','mushrooms'],['2 slices','bread'],['50 g','butter'],['1 clove','garlic']],
+    steps:['Get the pan hot before the mushrooms go in, and do not crowd them.','Add the butter and garlic once they have taken colour.','Pile onto toast and pour the pan juices over.'] },
+  { id:11, title:'Risotto with white wine and parmesan', book:'The Silver Spoon', page:'p.278',
+    lines:[['320 g','rice'],['150 ml','white wine'],['70 g','parmesan'],['40 g','butter'],['1','onion']],
+    steps:['Soften the onion in butter without colouring it.','Toast the rice until the grains turn glassy at the edges.','Add the wine, then hot stock a ladle at a time for 18 minutes.','Beat in cold butter and parmesan off the heat until it moves like lava.'] },
+  { id:12, title:'Bacon, egg and potato hash', book:'Real Fast Food · Nigel Slater', page:'p.51',
+    lines:[['200 g','bacon'],['3','eggs'],['500 g','potatoes'],['1','onion']],
+    steps:['Fry the diced potato until crusted before anything else joins it.','Add bacon and onion and leave it alone to catch.','Make three wells, crack in the eggs, cover until just set.'] }
+];
+
+const STAPLES = ['salt','olive oil','black pepper','butter','flour','eggs'];
+
+class Component extends DCLogic {
+  state = {
+    screen: 'dinner', prev: 'dinner', marks: {}, query: '', listQuery: '',
+    recipeId: 1, cook: false, done: {}, draft: null, toast: '',
+    apiKey: '', staples: { salt: true, 'olive oil': true, 'black pepper': true }
+  };
+
+  go(screen) { this.setState(s => ({ screen, prev: s.screen })); }
+  flash(msg) {
+    clearTimeout(this._t);
+    this.setState({ toast: msg });
+    this._t = setTimeout(() => this.setState({ toast: '' }), 2200);
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+
+  cycle(name) {
+    this.setState(s => {
+      const cur = s.marks[name] || 'unknown';
+      const next = cur === 'unknown' ? 'dontHave' : cur === 'dontHave' ? 'have' : 'unknown';
+      const marks = Object.assign({}, s.marks);
+      if (next === 'unknown') delete marks[name]; else marks[name] = next;
+      return { marks };
+    });
+  }
+
+  chipStyle(state) {
+    const base = { display:'inline-flex', alignItems:'center', gap:'6px', minHeight:'44px', padding:'0 14px',
+      borderRadius:'999px', cursor:'pointer', fontFamily:MONO, fontSize:'13px', maxWidth:'100%',
+      whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' };
+    if (state === 'have') return Object.assign(base, { background:'rgba(127,176,63,0.16)', border:'none', color:'#2F5320', fontWeight:600 });
+    if (state === 'dontHave') return Object.assign(base, { background:'rgba(158,86,50,0.12)', border:'none', color:'#9E5632', textDecoration:'line-through', textDecorationThickness:'1.5px' });
+    return Object.assign(base, { background:'#FCFAF3', border:'1px solid #DED8C6', color:'#1F2A16' });
+  }
+
+  ingsOf(r) { return r.lines.map(l => ING.find(([n]) => l[1].indexOf(n) === 0 || l[1].indexOf(n) > -1)).filter(Boolean).map(x => x[0]); }
+
+  renderVals() {
+    const st = this.state, marks = st.marks;
+    const q = st.query.trim().toLowerCase();
+    const recipe = RECIPES.find(r => r.id === st.recipeId) || RECIPES[0];
+
+    const tiles = ING.filter(([n]) => !q || n.includes(q)).map(([n, emoji]) => {
+      const s = marks[n] || 'unknown';
+      const short = n.length > 14 ? n.slice(0,13) + '…' : n;
+      return { label:(s === 'have' ? '✓ ' : '') + (emoji ? emoji + ' ' : '') + short,
+        aria:n + ', ' + (s === 'have' ? 'have' : s === 'dontHave' ? 'ruled out' : 'not marked'),
+        style:this.chipStyle(s), toggle:() => this.cycle(n) };
+    });
+
+    const scored = RECIPES.map(r => {
+      const ings = this.ingsOf(r);
+      return { r, missing: ings.filter(i => marks[i] === 'dontHave'),
+        notSure: ings.filter(i => !marks[i] && !st.staples[i]) };
+    });
+
+    const mk = x => ({
+      title:x.r.title, source:x.r.book + ' · ' + x.r.page,
+      hasMissing:x.missing.length > 0, hasNotSure:x.notSure.length > 0,
+      notSure:x.notSure.join(', '),
+      missing:x.missing.map(n => ({ name:n, aria:'add ' + n + ' to what you have',
+        add:() => this.setState(s => ({ marks: Object.assign({}, s.marks, { [n]:'have' }) })) })),
+      open:() => this.setState({ screen:'detail', prev:'dinner', recipeId:x.r.id, cook:false })
+    });
+
+    const simplest = (a,b) => (a.notSure.length - b.notSure.length) || (a.r.lines.length - b.r.lines.length);
+    const ready = scored.filter(x => x.missing.length === 0).sort(simplest);
+    const one = scored.filter(x => x.missing.length === 1).sort(simplest);
+    const ruled = scored.filter(x => x.missing.length > 1);
+
+    const head = { margin:0, fontFamily:MONO, fontSize:'11px', letterSpacing:'0.14em', textTransform:'uppercase', fontWeight:600, color:'#4C5940' };
+    const groups = [];
+    if (ready.length) groups.push({ label:'Ready to cook', count:ready.length, items:ready.slice(0,6).map(mk), wrapStyle:{}, headStyle:head });
+    if (one.length) groups.push({ label:'One thing away', count:one.length, items:one.slice(0,6).map(mk),
+      wrapStyle:{ borderLeft:'2px solid #7FB03F', paddingLeft:'14px', marginLeft:'-16px' },
+      headStyle:Object.assign({}, head, { color:'#2F5320' }) });
+
+    const lq = st.listQuery.trim().toLowerCase();
+    const listRows = RECIPES.filter(r => !lq || (r.title + ' ' + r.book).toLowerCase().includes(lq)).map(r => ({
+      title:r.title, source:r.book + ' · ' + r.page,
+      open:() => this.setState({ screen:'detail', prev:'list', recipeId:r.id, cook:false })
+    }));
+
+    const cook = st.cook;
+    const detailLines = recipe.lines.map(([qty,item]) => {
+      const base = ING.find(([n]) => item.indexOf(n) > -1);
+      const m = base ? marks[base[0]] : null;
+      return { qty, item,
+        mark: m === 'have' ? '✓' : m === 'dontHave' ? 'missing' : '',
+        markStyle:{ fontFamily:MONO, fontSize: cook ? '14px' : '11px', color: m === 'have' ? '#7FB03F' : '#9E5632', fontWeight:600 } };
+    });
+
+    const steps = recipe.steps.map((text, i) => {
+      const key = recipe.id + ':' + i, isDone = !!st.done[key];
+      return { num:String(i + 1).padStart(2,'0'), text,
+        rowStyle:{ display:'grid', gridTemplateColumns:'34px 1fr', gap:'10px', alignItems:'baseline', textAlign:'left',
+          background: isDone ? 'rgba(127,176,63,0.10)' : '#FCFAF3', border:'1px solid ' + (isDone ? 'transparent' : '#DED8C6'),
+          borderRadius:'2px', padding: cook ? '16px 14px' : '13px 13px', cursor:'pointer', minHeight:'44px' },
+        numStyle:{ fontFamily:MONO, fontSize: cook ? '14px' : '12px', color: isDone ? '#7FB03F' : '#4C5940', fontWeight:600 },
+        textStyle:{ fontFamily:SERIF, fontSize: cook ? '21px' : '16px', lineHeight:1.45, color: isDone ? '#4C5940' : '#1F2A16', textWrap:'pretty' },
+        toggle:() => this.setState(s => ({ done: Object.assign({}, s.done, { [key]: !s.done[key] }) })) };
+    });
+
+    const d = st.draft || { title:'', book:'', page:'', method:'', lines:[['','']] };
+    const setDraft = patch => this.setState(s => ({ draft: Object.assign({}, s.draft || d, patch) }));
+    const setLine = (i, j, v) => this.setState(s => {
+      const cur = s.draft || d, lines = cur.lines.map(l => l.slice());
+      lines[i][j] = v; return { draft: Object.assign({}, cur, { lines }) };
+    });
+
+    const tab = (key, label) => ({ label, go: () => this.go(key),
+      style:{ flex:1, minHeight:'56px', background:'transparent', border:'none', cursor:'pointer', fontFamily:MONO,
+        fontSize:'11px', letterSpacing:'0.1em', textTransform:'uppercase',
+        color: st.screen === key || (key === 'list' && (st.screen === 'detail' || st.screen === 'edit')) ? '#2F5320' : '#4C5940',
+        fontWeight: st.screen === key ? 600 : 400,
+        boxShadow: st.screen === key ? 'inset 0 2px 0 #7FB03F' : 'none' } });
+
+    const keyOk = st.apiKey.trim().length > 8;
+
+    return {
+      isDinner: st.screen === 'dinner', isList: st.screen === 'list', isDetail: st.screen === 'detail',
+      isEdit: st.screen === 'edit', isSettings: st.screen === 'settings',
+      tiles, noTiles: tiles.length === 0, groups,
+      query: st.query, onQuery: e => this.setState({ query: e.target.value }),
+      tally: RECIPES.length + ' recipes · ' + ready.length + ' ready · ' + ruled.length + ' ruled out',
+      showNothing: ready.length === 0 && one.length === 0,
+      reset: () => this.setState({ marks:{}, query:'' }),
+
+      listQuery: st.listQuery, onListQuery: e => this.setState({ listQuery: e.target.value }),
+      listRows, noListRows: listRows.length === 0,
+      newRecipe: () => this.setState({ screen:'edit', prev:'list', draft:{ title:'', book:'', page:'', method:'', lines:[['',''],['','']] } }),
+
+      recipe: { title: recipe.title, source: recipe.book + ' · ' + recipe.page, lines: detailLines },
+      detailTitleStyle:{ margin:0, fontFamily:SERIF, fontSize: cook ? '30px' : '26px', lineHeight:1.15, fontWeight:600, color:'#1F2A16', textWrap:'pretty' },
+      qtyStyle:{ fontFamily:MONO, fontSize: cook ? '15px' : '13px', color:'#4C5940' },
+      itemStyle:{ fontFamily:MONO, fontSize: cook ? '15px' : '13px', color:'#1F2A16', textWrap:'pretty' },
+      steps,
+      cookBtnLabel: cook ? 'Cook mode on' : 'Cook mode',
+      cookBtnStyle:{ fontFamily:MONO, fontSize:'11px', letterSpacing:'0.08em', textTransform:'uppercase',
+        color: cook ? '#F6F3E9' : '#2F5320', background: cook ? '#2F5320' : 'transparent',
+        border:'1px solid #2F5320', borderRadius:'999px', padding:'0 13px', minHeight:'44px', cursor:'pointer' },
+      toggleCook: () => this.setState(s => ({ cook: !s.cook })),
+      back: () => this.setState(s => ({ screen: s.prev === 'edit' ? 'detail' : s.prev })),
+      editRecipe: () => this.setState({ screen:'edit', prev:'detail',
+        draft:{ title:recipe.title, book:recipe.book, page:recipe.page, method:recipe.steps.join('\n'), lines:recipe.lines.map(l => l.slice()) } }),
+
+      editTitle: st.draft && st.draft.title ? 'Edit recipe' : 'New recipe',
+      draft: d,
+      draftLines: d.lines.map((l, i) => ({ qty:l[0], item:l[1],
+        onQty: e => setLine(i, 0, e.target.value), onItem: e => setLine(i, 1, e.target.value),
+        remove: () => this.setState(s => { const c = s.draft || d; return { draft: Object.assign({}, c, { lines: c.lines.filter((_, k) => k !== i) }) }; }) })),
+      addLine: () => this.setState(s => { const c = s.draft || d; return { draft: Object.assign({}, c, { lines: c.lines.concat([['','']]) }) }; }),
+      onDraftTitle: e => setDraft({ title: e.target.value }),
+      onDraftBook: e => setDraft({ book: e.target.value }),
+      onDraftPage: e => setDraft({ page: e.target.value }),
+      onDraftMethod: e => setDraft({ method: e.target.value }),
+      save: () => { this.setState(s => ({ screen: s.prev === 'detail' ? 'detail' : 'list' })); this.flash('Saved.'); },
+
+      apiKey: st.apiKey, onApiKey: e => this.setState({ apiKey: e.target.value }),
+      keyNote: keyOk ? 'Key stored on this device.' : 'No key yet. Photo-parse stays off until there is one.',
+      keyNoteStyle:{ fontFamily:MONO, fontSize:'11px', lineHeight:1.6, color: keyOk ? '#2F5320' : '#4C5940' },
+      staples: STAPLES.map(n => { const on = !!st.staples[n];
+        return { label:(on ? '✓ ' : '') + n, aria:n + ', ' + (on ? 'a staple' : 'not a staple'),
+          style:this.chipStyle(on ? 'have' : 'unknown'),
+          toggle:() => this.setState(s => Object.assign({}, { staples: Object.assign({}, s.staples, { [n]: !s.staples[n] }) })) }; }),
+      libraryLine: RECIPES.length + ' recipes across 7 books · last export 12 days ago',
+      exportAll: () => this.flash('Exported ' + RECIPES.length + ' recipes.'),
+
+      toast: st.toast,
+      noop: () => {},
+      tabs: [tab('dinner','Dinner'), tab('list','Recipes'), tab('settings','Settings')]
+    };
+  }
+}
+</script>
+</body>
+</html>
