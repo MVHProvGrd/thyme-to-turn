@@ -2,20 +2,21 @@ import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import Screen, { ScreenHeader } from '../components/Screen'
 import Button from '../components/Button'
+import Tile from '../components/Tile'
 import { useToast } from '../components/Toast'
 import { exportBackup, importBackup } from '../db/backup'
-import { countRecipes, listIngredients, updateSettings, wipeEverything } from '../db/repo'
+import { countRecipes, listIngredients, setStaple, updateSettings, wipeEverything } from '../db/repo'
+import { emojiFor } from '../lib/emoji'
 import { downloadText, formatBytes } from '../platform/files'
 import { now } from '../platform/clock'
 import { BackupError } from '../lib/backup-format'
 
 /**
- * Phase 1's Settings is her safety net and nothing else: get the data out, get it back in,
- * and see how much of it there is.
+ * Settings is her safety net, plus the one knob the dinner screen reads: which ingredients
+ * are staples. Everything else — get the data out, get it back in, see how much there is.
  *
  * Deliberately absent: the API key field. It arrives in phase 4 alongside the photo-parse
  * that uses it — a stored secret with nothing to spend it on is a liability, not a feature.
- * Staples arrive in phase 2 with the dinner screen that reads them.
  */
 export default function Settings() {
   const toast = useToast()
@@ -65,6 +66,35 @@ export default function Settings() {
         <p className="rounded-sm border border-rule border-l-2 border-l-leaf bg-card px-[14px] py-[13px] font-mono text-[11px] leading-[1.6] text-ink-soft">
           Everything works offline and stays on this phone. Nothing is uploaded anywhere.
         </p>
+
+        <section className="flex flex-col gap-3">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">
+            Staples — never counted as missing
+          </h2>
+          <p className="font-mono text-[11px] leading-[1.6] text-ink-soft">
+            Things that are always in the cupboard. The dinner screen never asks about a staple
+            and never counts one as missing or not sure — so a wrong one here gives a confidently
+            wrong answer there.
+          </p>
+          {ingredients && ingredients.length > 0 ? (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Staples">
+              {staplesFirst(ingredients).map((entry) => (
+                <Tile
+                  key={entry.uuid}
+                  name={entry.canonical}
+                  emoji={emojiFor(entry.canonical)}
+                  state={entry.isStaple ? 'have' : 'unknown'}
+                  ariaLabel={`${entry.canonical}, ${entry.isStaple ? 'a staple' : 'not a staple'}`}
+                  onTap={() => void setStaple(entry.uuid, !entry.isStaple)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="font-mono text-xs text-ink-soft">
+              Ingredients show up here as you add recipes.
+            </p>
+          )}
+        </section>
 
         <section className="flex flex-col gap-3">
           <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft">Library</h2>
@@ -128,4 +158,9 @@ export default function Settings() {
       </div>
     </Screen>
   )
+}
+
+/** Staples first so she can see the list she's trusting; the rest by how often they turn up. */
+function staplesFirst<T extends { isStaple: boolean }>(entries: T[]): T[] {
+  return [...entries.filter((e) => e.isStaple), ...entries.filter((e) => !e.isStaple)]
 }
